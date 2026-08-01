@@ -1,0 +1,110 @@
+*,
+*::before,
+*::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #fff;
+}
+
+/* ── Excalidraw wrapper ── */
+
+.excalidraw-wrapper {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+/* ── Export button (rendered via renderTopRightUI) ── */
+
+.export-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 0 1px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+  color: #555;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.export-btn:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: #222;
+}
+
+/* ── Hide Excalidraw UI elements that aren't relevant to handwriting eval ── */
+
+/* Hide the main menu hamburger button */
+.excalidraw .App-menu_top__left {
+  display: none !important;
+}
+
+/* Hide the library icon */
+.excalidraw .layer-ui__library-button {
+  display: none !important;
+}
+
+/* Hide the collaboration / live button */
+.excalidraw [data-testid="collab-button"] {
+  display: none !important;
+}
+
+/* Hide the help dialog button */
+.excalidraw .HelpButton {
+  display: none !important;
+}
+
+/* Hide shape tools — keep only selection, freedraw, eraser, hand */
+/* Rectangle */
+.excalidraw .App-toolbar [data-testid="toolbar-rectangle"] {
+  display: none !important;
+}
+/* Diamond */
+.excalidraw .App-toolbar [data-testid="toolbar-diamond"] {
+  display: none !important;
+}
+/* Ellipse */
+.excalidraw .App-toolbar [data-testid="toolbar-ellipse"] {
+  display: none !important;
+}
+/* Arrow */
+.excalidraw .App-toolbar [data-testid="toolbar-arrow"] {
+  display: none !important;
+}
+/* Line */
+.excalidraw .App-toolbar [data-testid="toolbar-line"] {
+  display: none !important;
+}
+/* Text */
+.excalidraw .App-toolbar [data-testid="toolbar-text"] {
+  display: none !important;
+}
+/* Image */
+.excalidraw .App-toolbar [data-testid="toolbar-image"] {
+  display: none !important;
+}
+/* Frame */
+.excalidraw .App-toolbar [data-testid="toolbar-frame"] {
+  display: none !important;
+}
+/* Embeddable / iframe */
+.excalidraw .App-toolbar [data-testid="toolbar-embeddable"] {
+  display: none !important;
+}
+/* Laser pointer */
+.excalidraw .App-toolbar [data-testid="toolbar-laser"] {
+  display: none !important;
+}
