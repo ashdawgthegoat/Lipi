@@ -1,0 +1,38 @@
+name: lipi_s4_prototype
+description: "Lipi Sprint 4 Prototype - Technical Validation of Prescription Workflow and .lipi Document"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  webview_flutter: ^4.10.0
+  webview_flutter_android: ^4.7.0
+  shelf: ^1.4.2
+  shelf_static: ^1.1.3
+  sqflite: ^2.4.1
+  sqflite_common_ffi: ^2.3.4
+  path_provider: ^2.1.5
+  path: ^1.9.1
+  archive: ^3.6.1
+  xml: ^6.5.0
+  uuid: ^4.5.1
+  pdf: ^3.11.1
+  printing: ^5.13.2
+  intl: ^0.20.0
+  file_picker: ^12.2.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/web/
+    - assets/web/assets/
