@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -45,10 +46,12 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
   WebViewController? _webController;
   bool _webReady = false;
   bool _isExporting = false;
+  Timer? _inkSyncDebounceTimer;
 
   // Desktop stylus/mouse fallback stroke points
   final List<List<Offset>> _fallbackStrokes = [];
   final List<Stroke> _desktopStrokes = [];
+  int _desktopRepaintVersion = 0;
 
   @override
   void initState() {
@@ -62,6 +65,8 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
       debounceDuration: const Duration(milliseconds: 800),
     );
 
+    widget.dependencies.themeService.activeThemeNotifier.addListener(_onThemeChanged);
+
     if (Platform.isAndroid) {
       _initWebView();
     } else {
@@ -72,8 +77,17 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
 
   @override
   void dispose() {
+    widget.dependencies.themeService.activeThemeNotifier.removeListener(_onThemeChanged);
+    _inkSyncDebounceTimer?.cancel();
     _autosaveController.dispose();
     super.dispose();
+  }
+
+  void _onThemeChanged() {
+    if (_webController != null && _webReady) {
+      final themeJson = jsonEncode(widget.dependencies.themeService.activeTheme.toWebThemeJson());
+      _webController!.runJavaScript('window.setLipiTheme($themeJson);');
+    }
   }
 
   Future<void> _initWebView() async {
@@ -124,7 +138,10 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
           _injectInitialData();
         }
       } else if (type == 'INK_CHANGED') {
-        _syncInkFromWebView();
+        _inkSyncDebounceTimer?.cancel();
+        _inkSyncDebounceTimer = Timer(const Duration(milliseconds: 1000), () {
+          _syncInkFromWebView();
+        });
       }
     } catch (e) {
       debugPrint('[Lipi][Prescription] Error parsing web message: $e');
@@ -170,6 +187,7 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
       },
       'consultationId': widget.consultationId.value,
       'elements': excalidrawElements,
+      'theme': widget.dependencies.themeService.activeTheme.toWebThemeJson(),
     };
 
     final script = 'window.initPrescription(${jsonEncode(initPayload)});';
@@ -204,7 +222,9 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
   Future<void> _exportPdf() async {
     setState(() => _isExporting = true);
     try {
-      // 1. Flush any pending autosave first
+      // 1. Flush any pending ink sync and autosave
+      _inkSyncDebounceTimer?.cancel();
+      await _syncInkFromWebView();
       await _autosaveController.saveNow();
 
       // 2. Generate PDF bytes from canonical clinical document
@@ -231,6 +251,8 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
   }
 
   Future<void> _handleClose() async {
+    _inkSyncDebounceTimer?.cancel();
+    await _syncInkFromWebView();
     await _autosaveController.saveNow();
     if (mounted) {
       Navigator.of(context).pop();
@@ -242,14 +264,14 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) _autosaveController.saveNow();
+        if (didPop) {
+          _inkSyncDebounceTimer?.cancel();
+          _syncInkFromWebView().then((_) => _autosaveController.saveNow());
+        }
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFE2E8F0),
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         appBar: AppBar(
-          backgroundColor: const Color(0xFF0F172A),
-          foregroundColor: Colors.white,
-          elevation: 1,
           title: Text(
             'Prescription — ${widget.patient.name} (${widget.patient.age} Y)',
             style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
@@ -406,18 +428,22 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
                 behavior: HitTestBehavior.opaque,
                 onPanStart: (details) {
                   setState(() {
+                    _desktopRepaintVersion++;
                     _fallbackStrokes.add([details.localPosition]);
                   });
-                  _commitDesktopStrokes();
                 },
                 onPanUpdate: (details) {
                   setState(() {
+                    _desktopRepaintVersion++;
                     if (_fallbackStrokes.isNotEmpty) {
                       _fallbackStrokes.last.add(details.localPosition);
                     }
                   });
                 },
                 onPanEnd: (_) {
+                  setState(() {
+                    _desktopRepaintVersion++;
+                  });
                   _commitDesktopStrokes();
                 },
                 child: SizedBox(
@@ -428,6 +454,7 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
                     painter: _DesktopInkPainter(
                       historicalStrokes: _desktopStrokes,
                       liveStrokes: _fallbackStrokes,
+                      repaintVersion: _desktopRepaintVersion,
                     ),
                   ),
                 ),
@@ -482,10 +509,12 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
 class _DesktopInkPainter extends CustomPainter {
   final List<Stroke> historicalStrokes;
   final List<List<Offset>> liveStrokes;
+  final int repaintVersion;
 
   _DesktopInkPainter({
     required this.historicalStrokes,
     required this.liveStrokes,
+    required this.repaintVersion,
   });
 
   @override
@@ -554,5 +583,9 @@ class _DesktopInkPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(covariant _DesktopInkPainter oldDelegate) => true;
+  bool shouldRepaint(covariant _DesktopInkPainter oldDelegate) =>
+      repaintVersion != oldDelegate.repaintVersion ||
+      historicalStrokes.length != oldDelegate.historicalStrokes.length ||
+      liveStrokes.isNotEmpty ||
+      oldDelegate.liveStrokes.isNotEmpty;
 }

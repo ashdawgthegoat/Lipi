@@ -25,8 +25,10 @@ class PatientWorkspaceScreen extends StatefulWidget {
 }
 
 class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
+  final TextEditingController _searchController = TextEditingController();
   List<Consultation> _consultations = [];
   bool _isLoading = true;
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -34,9 +36,25 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
     _loadConsultations();
   }
 
-  Future<void> _loadConsultations() async {
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadConsultations({String? query}) async {
     setState(() => _isLoading = true);
-    final result = await widget.dependencies.listConsultationHistoryWorkflow.execute(widget.patient.id);
+    final effectiveQuery = query ?? _searchController.text.trim();
+    _searchQuery = effectiveQuery;
+
+    final result = effectiveQuery.isEmpty
+        ? await widget.dependencies.listConsultationHistoryWorkflow
+            .execute(widget.patient.id)
+        : await widget.dependencies.searchConsultationsWorkflow.execute(
+            patientId: widget.patient.id,
+            query: effectiveQuery,
+          );
+
     if (!mounted) return;
 
     result.fold(
@@ -118,17 +136,105 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
     );
   }
 
+  Future<void> _confirmDeletePrescription(Consultation consultation) async {
+    final dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 28),
+            SizedBox(width: 10),
+            Text('Delete Prescription?'),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'This will permanently delete this prescription document and its digital ink.\n\nOther prescriptions and patient records will remain unaffected.',
+              style: TextStyle(fontSize: 14, height: 1.4, color: Color(0xFF334155)),
+            ),
+            const SizedBox(height: 16),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Date: ${dateFormat.format(consultation.createdAt)}',
+                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: Color(0xFF0F172A))),
+                  const SizedBox(height: 4),
+                  Text('Status: ${consultation.status.name.toUpperCase()}',
+                      style: const TextStyle(fontSize: 12, color: Color(0xFF64748B))),
+                  const SizedBox(height: 4),
+                  Text('ID: ${consultation.id.value}',
+                      style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8))),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete Permanently'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _isLoading = true);
+      final res = await widget.dependencies.deleteConsultationWorkflow.execute(
+        patientId: widget.patient.id,
+        consultationId: consultation.id,
+      );
+
+      if (!mounted) return;
+
+      if (res.isSuccess) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Prescription deleted successfully.'),
+            backgroundColor: Color(0xFF1E293B),
+          ),
+        );
+        _loadConsultations();
+      } else {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete prescription: ${res.errorOrNull?.message}')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final patient = widget.patient;
     final dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(patient.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
         elevation: 1,
       ),
       body: Column(
@@ -186,9 +292,42 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
           ),
           const Divider(height: 1, color: Color(0xFFE2E8F0)),
 
+          // Patient-Scoped Prescription Search Field
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            child: TextField(
+              key: const Key('patient_prescription_search_field'),
+              controller: _searchController,
+              onChanged: (val) => _loadConsultations(query: val.trim()),
+              decoration: InputDecoration(
+                hintText: 'Search prescriptions by date (e.g. 2026-09-08, Sep) or ID...',
+                prefixIcon: const Icon(Icons.search, size: 20),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          _searchController.clear();
+                          _loadConsultations(query: '');
+                        },
+                      )
+                    : null,
+                filled: true,
+                fillColor: const Color(0xFFF8FAFC),
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              ),
+            ),
+          ),
+          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+
           // Consultation History Section Header
           Padding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 10),
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 10),
             child: Row(
               children: [
                 const Icon(Icons.history, size: 20, color: Color(0xFF475569)),
@@ -199,14 +338,14 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
                 ),
                 const Spacer(),
                 Text(
-                  '${_consultations.length} Prescriptions',
+                  '${_consultations.length} ${_searchQuery.isNotEmpty ? "Found" : "Prescriptions"}',
                   style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
                 ),
               ],
             ),
           ),
 
-          // History List
+          // History List or Search Results
           Expanded(
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -215,22 +354,38 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.description_outlined, size: 56, color: Colors.grey[400]),
+                            Icon(
+                              _searchQuery.isNotEmpty ? Icons.search_off : Icons.description_outlined,
+                              size: 56,
+                              color: Colors.grey[400],
+                            ),
                             const SizedBox(height: 16),
                             Text(
-                              'No prescriptions recorded yet',
+                              _searchQuery.isNotEmpty
+                                  ? 'No prescriptions found matching "$_searchQuery"'
+                                  : 'No prescriptions recorded yet',
                               style: TextStyle(fontSize: 16, color: Colors.grey[600]),
                             ),
                             const SizedBox(height: 12),
-                            ElevatedButton.icon(
-                              onPressed: _startNewPrescription,
-                              icon: const Icon(Icons.create, size: 18),
-                              label: const Text('Create First Prescription'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF1A365D),
-                                foregroundColor: Colors.white,
+                            if (_searchQuery.isNotEmpty)
+                              TextButton.icon(
+                                onPressed: () {
+                                  _searchController.clear();
+                                  _loadConsultations(query: '');
+                                },
+                                icon: const Icon(Icons.clear, size: 18),
+                                label: const Text('Clear search filter'),
+                              )
+                            else
+                              ElevatedButton.icon(
+                                onPressed: _startNewPrescription,
+                                icon: const Icon(Icons.create, size: 18),
+                                label: const Text('Create First Prescription'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: const Color(0xFF1A365D),
+                                  foregroundColor: Colors.white,
+                                ),
                               ),
-                            ),
                           ],
                         ),
                       )
@@ -286,6 +441,13 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: const Color(0xFF1A365D),
                                       ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    IconButton(
+                                      key: Key('delete_prescription_${con.id.value}'),
+                                      icon: const Icon(Icons.delete_outline, color: Color(0xFFDC2626), size: 22),
+                                      tooltip: 'Delete Prescription',
+                                      onPressed: () => _confirmDeletePrescription(con),
                                     ),
                                   ],
                                 ),

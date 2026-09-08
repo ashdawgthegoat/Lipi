@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import '../domains/doctor/models/doctor_profile.dart';
+import '../infrastructure/themes/built_in_themes.dart';
+import '../infrastructure/themes/theme_model.dart';
 import '../presentation/first_launch/first_launch_screen.dart';
 import '../presentation/patients/main_workspace_screen.dart';
+import '../presentation/widgets/lipi_logo.dart';
 import 'dependencies.dart';
 import 'workflows/initialize_application_workflow.dart';
 
@@ -80,18 +83,25 @@ class _LipiAppState extends State<LipiApp> {
 
   @override
   Widget build(BuildContext context) {
+    final themeNotifier = _dependencies?.themeService.activeThemeNotifier;
+    if (themeNotifier != null) {
+      return ValueListenableBuilder<LipiTheme>(
+        valueListenable: themeNotifier,
+        builder: (context, activeTheme, _) {
+          return MaterialApp(
+            title: 'Lipi',
+            debugShowCheckedModeBanner: false,
+            theme: activeTheme.toThemeData(),
+            home: _buildHome(),
+          );
+        },
+      );
+    }
+
     return MaterialApp(
       title: 'Lipi',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: const Color(0xFF1A365D),
-          primary: const Color(0xFF1A365D),
-          surface: const Color(0xFFF8FAFC),
-        ),
-        scaffoldBackgroundColor: const Color(0xFFF1F5F9),
-        useMaterial3: true,
-      ),
+      theme: BuiltInThemes.defaultTheme.toThemeData(),
       home: _buildHome(),
     );
   }
@@ -104,7 +114,7 @@ class _LipiAppState extends State<LipiApp> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.edit_note, size: 64, color: Colors.blueAccent),
+              LipiLogo(size: 64, borderRadius: 12),
               SizedBox(height: 16),
               Text(
                 'Lipi',

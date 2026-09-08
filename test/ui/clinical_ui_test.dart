@@ -175,6 +175,104 @@ void main() {
       expect(find.text('New Prescription'), findsOneWidget);
     });
 
+    testWidgets('PatientWorkspaceScreen supports deleting a specific prescription with confirmation', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+
+      late Patient patient;
+      final cid1 = ConsultationId('con-del-1');
+      final cid2 = ConsultationId('con-keep-2');
+
+      await tester.runAsync(() async {
+        await deps.doctorRepository.saveProfile(doctorProfile);
+        final pRes = await deps.createPatientWorkflow.execute(
+          info: const PatientInfo(
+            name: 'Anjali Bose',
+            age: 29,
+            gender: 'Female',
+            city: 'Bengaluru',
+          ),
+        );
+        patient = pRes.valueOrNull!;
+
+        // Create 2 prescriptions
+        await deps.startConsultationWorkflow.execute(
+          patientId: patient.id,
+          consultationId: cid1,
+        );
+        await deps.startConsultationWorkflow.execute(
+          patientId: patient.id,
+          consultationId: cid2,
+        );
+      });
+
+      await tester.pumpWidget(MaterialApp(
+        home: PatientWorkspaceScreen(
+          dependencies: deps,
+          doctorProfile: doctorProfile,
+          patient: patient,
+        ),
+      ));
+
+      await tester.runAsync(() async {
+        await Future.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pumpAndSettle();
+
+      // Both prescriptions should be listed
+      expect(find.byKey(Key('delete_prescription_${cid1.value}')), findsOneWidget);
+      expect(find.byKey(Key('delete_prescription_${cid2.value}')), findsOneWidget);
+
+      // Tap delete on prescription 1
+      await tester.tap(find.byKey(Key('delete_prescription_${cid1.value}')));
+      await tester.pumpAndSettle();
+
+      // Destructive confirmation dialog appears
+      expect(find.text('Delete Prescription?'), findsOneWidget);
+      expect(find.text('Delete Permanently'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+
+      // Cancel first -> nothing should be deleted
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Delete Prescription?'), findsNothing);
+      expect(find.byKey(Key('delete_prescription_${cid1.value}')), findsOneWidget);
+
+      // Tap delete again and confirm
+      await tester.tap(find.byKey(Key('delete_prescription_${cid1.value}')));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Delete Permanently'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+
+      for (int i = 0; i < 30; i++) {
+        await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 50));
+        final exists = await tester.runAsync(() => deps.documentRepository.documentExists(patient.id, cid1));
+        if (exists?.valueOrNull == false) break;
+      }
+
+      // Allow _loadConsultations to complete and dismiss spinner
+      for (int i = 0; i < 30; i++) {
+        await tester.runAsync(() => Future.delayed(const Duration(milliseconds: 50)));
+        await tester.pump(const Duration(milliseconds: 50));
+        if (find.byType(CircularProgressIndicator).evaluate().isEmpty) break;
+      }
+
+      // Verify prescription 1 is removed from the UI
+      expect(find.byKey(Key('delete_prescription_${cid1.value}')), findsNothing);
+      // Verify prescription 2 remains in the UI
+      expect(find.byKey(Key('delete_prescription_${cid2.value}')), findsOneWidget);
+
+      // Verify on disk and database
+      await tester.runAsync(() async {
+        expect((await deps.documentRepository.documentExists(patient.id, cid1)).valueOrNull, isFalse);
+        expect((await deps.documentRepository.documentExists(patient.id, cid2)).valueOrNull, isTrue);
+      });
+    });
+
     testWidgets('PrescriptionWorkspaceScreen renders desktop canvas and save status', (tester) async {
       tester.view.physicalSize = const Size(1200, 1000);
       tester.view.devicePixelRatio = 1.0;

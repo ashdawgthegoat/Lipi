@@ -7,6 +7,7 @@ import '../../domains/doctor/models/doctor_profile.dart';
 import '../../domains/doctor/models/template_config.dart';
 import '../../shared/ids/ids.dart';
 import '../patients/main_workspace_screen.dart';
+import '../widgets/lipi_logo.dart';
 
 class FirstLaunchScreen extends StatefulWidget {
   final LipiDependencies dependencies;
@@ -47,7 +48,7 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
     try {
       final files = await FilePicker.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['png', 'jpg', 'jpeg'],
+        allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp'],
       );
       if (files.isNotEmpty && files.first.path != null) {
         final file = File(files.first.path!);
@@ -156,7 +157,7 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
                               color: const Color(0xFF1A365D).withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.local_hospital, color: Color(0xFF1A365D), size: 32),
+                            child: const LipiLogo(size: 32, borderRadius: 8),
                           ),
                           const SizedBox(width: 16),
                           const Expanded(
@@ -273,7 +274,48 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
                       ),
                       const SizedBox(height: 20),
 
-                      // Custom Template Letterhead Image Picker
+                      // Prescription Template Recommendation Banner
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                        ),
+                        child: const Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(Icons.picture_as_pdf_outlined, color: Color(0xFF1D4ED8), size: 22),
+                            SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'For best results, use the original PDF prescription template when available.',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                      color: Color(0xFF1E3A8A),
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
+                                  Text(
+                                    'You can also upload an image of the template (.png, .jpg).',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF1E40AF),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Custom Template Letterhead Image / PDF Picker
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
@@ -283,16 +325,38 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.image, color: Color(0xFF3B82F6), size: 28),
+                            Icon(
+                              _customTemplateFile?.path.toLowerCase().endsWith('.pdf') == true
+                                  ? Icons.picture_as_pdf
+                                  : Icons.image,
+                              color: const Color(0xFF3B82F6),
+                              size: 28,
+                            ),
                             const SizedBox(width: 14),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   const Text(
-                                    'Custom Letterhead Image (Optional)',
+                                    'Custom Letterhead (PDF or Image)',
                                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                    overflow: TextOverflow.ellipsis,
                                   ),
+                                  if (_customTemplateFile?.path.toLowerCase().endsWith('.pdf') == true)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 2),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFFDC2626).withValues(alpha: 0.1),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: const Text(
+                                          'PDF Template (Page 1 imported)',
+                                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                                        ),
+                                      ),
+                                    ),
                                   Text(
                                     _customTemplateFile != null
                                         ? 'Selected: ${_customTemplateFile!.path.split('/').last}'

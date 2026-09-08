@@ -193,17 +193,111 @@ class SaveConsultationWorkflow {
   }
 }
 
-/// Lists all prescriptions for a patient and verifies document presence on disk.
+/// Lists all prescriptions for a patient.
 class ListConsultationHistoryWorkflow {
   final ConsultationRepository consultationRepository;
-  final DocumentRepository documentRepository;
 
   ListConsultationHistoryWorkflow({
     required this.consultationRepository,
-    required this.documentRepository,
   });
 
   Future<Result<List<Consultation>, LipiError>> execute(PatientId patientId) async {
     return await consultationRepository.getConsultationsForPatient(patientId);
+  }
+}
+
+/// Patient-scoped search of prescription and consultation history.
+///
+/// Follows ADR-0008 & MVP Clinical Search requirements:
+/// - Operates strictly within the selected patient's consultation history.
+/// - Matches structured metadata: consultation date, identifier, and status.
+/// - Does not interpret or OCR clinical handwriting content.
+/// - Does not modify or mutate any clinical documents or database records.
+class SearchConsultationsWorkflow {
+  final ConsultationRepository consultationRepository;
+
+  SearchConsultationsWorkflow({required this.consultationRepository});
+
+  Future<Result<List<Consultation>, LipiError>> execute({
+    required PatientId patientId,
+    required String query,
+  }) async {
+    return await consultationRepository.searchConsultationsForPatient(
+      patientId: patientId,
+      query: query,
+    );
+  }
+}
+
+/// Explicit individual prescription deletion.
+///
+/// Follows ADR-0008, ADR-0004 & M14 Doctor-controlled destructive deletion:
+/// - Verifies that the consultation belongs to the specified patient.
+/// - Deletes the canonical .lipi package and any derived PDF from Vault storage.
+/// - Deletes the structured SQLite consultation metadata entry.
+/// - Preserves existing document bytes in memory during delete so that if SQLite
+///   deletion fails, the document can be restored to leave the Vault in a coherent state.
+/// - Never deletes or alters any other consultations or patient records.
+class DeleteConsultationWorkflow {
+  final LipiVault vault;
+  final ConsultationRepository consultationRepository;
+  final DocumentRepository documentRepository;
+
+  DeleteConsultationWorkflow({
+    required this.vault,
+    required this.consultationRepository,
+    required this.documentRepository,
+  });
+
+  Future<Result<void, LipiError>> execute({
+    required PatientId patientId,
+    required ConsultationId consultationId,
+  }) async {
+    try {
+      // 1. Verify consultation exists and belongs to the given patient
+      final conRes = await consultationRepository.getConsultationById(consultationId);
+      if (conRes.isFailure) return Failure(conRes.errorOrNull!);
+      final consultation = conRes.valueOrNull;
+      if (consultation == null) {
+        return Failure(StorageError('Consultation not found: ${consultationId.value}'));
+      }
+      if (consultation.patientId != patientId) {
+        return Failure(ValidationError(
+          'Consultation ${consultationId.value} does not belong to patient ${patientId.value}',
+        ));
+      }
+
+      // 2. Read existing bytes if present for rollback resilience
+      final relPath = vault.getPrescriptionRelativePath(patientId, consultationId);
+      Uint8List? existingBytes;
+      if (await vault.fs.exists(relPath)) {
+        try {
+          existingBytes = await vault.fs.readBytes(relPath);
+        } catch (_) {}
+      }
+
+      // 3. Delete physical .lipi document and any derived PDF
+      final delDocRes = await documentRepository.deleteDocument(patientId, consultationId);
+      if (delDocRes.isFailure) {
+        return Failure(delDocRes.errorOrNull!);
+      }
+
+      // 4. Delete SQLite metadata entry
+      final delMetaRes = await consultationRepository.deleteConsultation(consultationId);
+      if (delMetaRes.isFailure) {
+        // Rollback document file to preserve coherent vault state
+        if (existingBytes != null) {
+          try {
+            await vault.fs.writeBytes(relPath, existingBytes);
+          } catch (_) {}
+        }
+        return Failure(delMetaRes.errorOrNull!);
+      }
+
+      return const Success(null);
+    } catch (e, st) {
+      if (e is LipiError) return Failure(e);
+      return Failure(StorageError('Failed to delete consultation: ${consultationId.value}', e, st));
+    }
   }
 }

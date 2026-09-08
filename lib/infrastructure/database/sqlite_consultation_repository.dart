@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:intl/intl.dart';
 import 'package:sqflite/sqflite.dart';
 import '../../domains/consultation/consultation_repository.dart';
 import '../../domains/consultation/models/consultation.dart';
@@ -89,6 +90,55 @@ class SqliteConsultationRepository implements ConsultationRepository {
   }
 
   @override
+  Future<Result<List<Consultation>, LipiError>> searchConsultationsForPatient({
+    required PatientId patientId,
+    required String query,
+  }) async {
+    try {
+      final allRes = await getConsultationsForPatient(patientId);
+      if (allRes.isFailure) return allRes;
+      final all = allRes.valueOrNull ?? [];
+
+      final trimmed = query.trim().toLowerCase();
+      if (trimmed.isEmpty) {
+        return Success(all);
+      }
+
+      final dateFormatFull = DateFormat('dd MMM yyyy');
+      final dateFormatISO = DateFormat('yyyy-MM-dd');
+      final dateFormatMonth = DateFormat('MMMM yyyy');
+      final dateFormatDay = DateFormat('EEEE');
+
+      final filtered = all.where((c) {
+        // 1. Match consultation ID
+        if (c.id.value.toLowerCase().contains(trimmed)) return true;
+
+        // 2. Match status
+        if (c.status.name.toLowerCase().contains(trimmed)) return true;
+
+        // 3. Match dates across common clinical query formats
+        final date = c.createdAt;
+        if (dateFormatISO.format(date).toLowerCase().contains(trimmed)) return true;
+        if (dateFormatFull.format(date).toLowerCase().contains(trimmed)) return true;
+        if (dateFormatMonth.format(date).toLowerCase().contains(trimmed)) return true;
+        if (dateFormatDay.format(date).toLowerCase().contains(trimmed)) return true;
+        if (date.year.toString().contains(trimmed)) return true;
+        if (date.day.toString().padLeft(2, '0').contains(trimmed)) return true;
+
+        return false;
+      }).toList();
+
+      return Success(filtered);
+    } catch (e, st) {
+      return Failure(StorageError(
+        'Failed to search consultations for patient: ${patientId.value}',
+        e,
+        st,
+      ));
+    }
+  }
+
+  @override
   Future<Result<void, LipiError>> deleteConsultation(ConsultationId id) async {
     try {
       final count = await _db.delete(
@@ -125,30 +175,21 @@ class SqliteConsultationRepository implements ConsultationRepository {
     }
   }
 
-  Consultation _rowToConsultation(Map<String, dynamic> row) {
-    final patientSnapshot = PatientSnapshot.fromJson(
-      jsonDecode(row['patient_snapshot_json'] as String)
-          as Map<String, dynamic>,
-    );
-    final doctorSnapshot = DoctorSnapshot.fromJson(
-      jsonDecode(row['doctor_snapshot_json'] as String)
-          as Map<String, dynamic>,
-    );
-    final pageDimensions = PageDimensions.fromJson(
-      jsonDecode(row['page_dimensions_json'] as String)
-          as Map<String, dynamic>,
-    );
+  Consultation _rowToConsultation(Map<String, Object?> row) {
+    final patientSnapshotMap = jsonDecode(row['patient_snapshot_json'] as String)
+        as Map<String, dynamic>;
+    final doctorSnapshotMap = jsonDecode(row['doctor_snapshot_json'] as String)
+        as Map<String, dynamic>;
+    final pageDimensionsMap = jsonDecode(row['page_dimensions_json'] as String)
+        as Map<String, dynamic>;
 
     return Consultation(
       id: ConsultationId(row['id'] as String),
       patientId: PatientId(row['patient_id'] as String),
-      patientSnapshot: patientSnapshot,
-      doctorSnapshot: doctorSnapshot,
-      pageDimensions: pageDimensions,
-      status: ConsultationStatus.values.firstWhere(
-        (s) => s.name == row['status'],
-        orElse: () => ConsultationStatus.saved,
-      ),
+      patientSnapshot: PatientSnapshot.fromJson(patientSnapshotMap),
+      doctorSnapshot: DoctorSnapshot.fromJson(doctorSnapshotMap),
+      pageDimensions: PageDimensions.fromJson(pageDimensionsMap),
+      status: ConsultationStatus.values.byName(row['status'] as String),
       lipiRelativePath: row['lipi_relative_path'] as String,
       pdfRelativePath: row['pdf_relative_path'] as String?,
       createdAt: DateTime.parse(row['created_at'] as String),

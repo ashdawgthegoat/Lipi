@@ -17,6 +17,7 @@ import '../infrastructure/security/secure_key_store.dart';
 import '../infrastructure/security/vault_authentication.dart';
 import '../infrastructure/security/vault_crypto.dart';
 import '../infrastructure/security/vault_key_store.dart';
+import '../infrastructure/themes/theme_service.dart';
 import '../infrastructure/vault/vault.dart';
 import '../infrastructure/vault/vault_backup_service.dart';
 import 'workflows/consultation_workflows.dart';
@@ -42,6 +43,7 @@ class LipiDependencies {
   final DocumentWriteCoordinator writeCoordinator;
   final EditorRuntimeServer editorServer;
   final VaultBackupService vaultBackupService;
+  final ThemeService themeService;
 
   // Workflows
   final InitializeApplicationWorkflow initWorkflow;
@@ -55,6 +57,8 @@ class LipiDependencies {
   final LoadConsultationWorkflow loadConsultationWorkflow;
   final SaveConsultationWorkflow saveConsultationWorkflow;
   final ListConsultationHistoryWorkflow listConsultationHistoryWorkflow;
+  final SearchConsultationsWorkflow searchConsultationsWorkflow;
+  final DeleteConsultationWorkflow deleteConsultationWorkflow;
 
   LipiDependencies._({
     required this.vault,
@@ -71,6 +75,7 @@ class LipiDependencies {
     required this.writeCoordinator,
     required this.editorServer,
     required this.vaultBackupService,
+    required this.themeService,
     required this.initWorkflow,
     required this.configureDoctorWorkflow,
     required this.configureTemplateWorkflow,
@@ -82,6 +87,8 @@ class LipiDependencies {
     required this.loadConsultationWorkflow,
     required this.saveConsultationWorkflow,
     required this.listConsultationHistoryWorkflow,
+    required this.searchConsultationsWorkflow,
+    required this.deleteConsultationWorkflow,
   });
 
   /// Factory to initialize all dependencies.
@@ -92,12 +99,17 @@ class LipiDependencies {
     VaultDatabase.initializeFfiIfRequired();
 
     final Directory vaultDir;
+    final Directory themesDir;
     if (customVaultDir != null) {
       vaultDir = customVaultDir;
+      themesDir = Directory(p.join(customVaultDir.path, 'themes'));
     } else {
       final appDocsDir = await getApplicationDocumentsDirectory();
       vaultDir = Directory(p.join(appDocsDir.path, 'lipi_vault'));
+      themesDir = Directory(p.join(appDocsDir.path, 'themes'));
     }
+
+    final themeService = await ThemeService.create(storageDirectory: themesDir);
 
     final vault = LipiVault(vaultDir);
     await vault.initialize();
@@ -197,7 +209,16 @@ class LipiDependencies {
 
     final listConsultationHistoryWorkflow = ListConsultationHistoryWorkflow(
       consultationRepository: consultationRepo,
+    );
+
+    final deleteConsultationWorkflow = DeleteConsultationWorkflow(
+      vault: vault,
+      consultationRepository: consultationRepo,
       documentRepository: docRepo,
+    );
+
+    final searchConsultationsWorkflow = SearchConsultationsWorkflow(
+      consultationRepository: consultationRepo,
     );
 
     return LipiDependencies._(
@@ -215,6 +236,7 @@ class LipiDependencies {
       writeCoordinator: writeCoordinator,
       editorServer: editorServer,
       vaultBackupService: vaultBackupService,
+      themeService: themeService,
       initWorkflow: initWorkflow,
       configureDoctorWorkflow: configureDoctorWorkflow,
       configureTemplateWorkflow: configureTemplateWorkflow,
@@ -226,6 +248,8 @@ class LipiDependencies {
       loadConsultationWorkflow: loadConsultationWorkflow,
       saveConsultationWorkflow: saveConsultationWorkflow,
       listConsultationHistoryWorkflow: listConsultationHistoryWorkflow,
+      searchConsultationsWorkflow: searchConsultationsWorkflow,
+      deleteConsultationWorkflow: deleteConsultationWorkflow,
     );
   }
 

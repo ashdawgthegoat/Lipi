@@ -10,6 +10,8 @@ import '../../domains/patient/models/patient_info.dart';
 import '../../shared/ids/ids.dart';
 import '../patient/patient_workspace_screen.dart';
 import '../prescription/prescription_workspace_screen.dart';
+import '../settings/theme_settings_dialog.dart';
+import '../widgets/lipi_logo.dart';
 
 class MainWorkspaceScreen extends StatefulWidget {
   final LipiDependencies dependencies;
@@ -316,36 +318,116 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                     const SizedBox(height: 16),
                     const Divider(),
                     const SizedBox(height: 8),
-                    const Text('Custom Letterhead Background:', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            newTemplateFile != null
-                                ? 'New: ${newTemplateFile!.path.split('/').last}'
-                                : (_currentDoctorProfile.templatePath != null
-                                    ? 'Current: ${_currentDoctorProfile.templatePath!.split('/').last}'
-                                    : 'Default Vector Letterhead'),
-                            style: const TextStyle(fontSize: 12, color: Color(0xFF475569)),
+
+                    // Recommendation Banner
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEFF6FF),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                      ),
+                      child: const Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.picture_as_pdf_outlined, color: Color(0xFF1D4ED8), size: 20),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'For best results, use the original PDF prescription template when available.',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    color: Color(0xFF1E3A8A),
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'You can also upload an image of the template (.png, .jpg).',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Color(0xFF1E40AF),
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        TextButton.icon(
-                          onPressed: () async {
-                            final picked = await FilePicker.pickFiles(
-                              type: FileType.custom,
-                              allowedExtensions: ['png', 'jpg', 'jpeg'],
-                            );
-                            if (picked.isNotEmpty && picked.first.path != null) {
-                              setDialogState(() {
-                                newTemplateFile = File(picked.first.path!);
-                              });
-                            }
-                          },
-                          icon: const Icon(Icons.upload_file, size: 16),
-                          label: const Text('Change'),
-                        ),
-                      ],
+                        ],
+                      ),
+                    ),
+
+                    const Text('Custom Letterhead Background (PDF or Image):',
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF8FAFC),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            (newTemplateFile?.path.toLowerCase().endsWith('.pdf') ??
+                                    _currentDoctorProfile.templatePath?.toLowerCase().endsWith('.pdf') ??
+                                    false)
+                                ? Icons.picture_as_pdf
+                                : Icons.image,
+                            color: const Color(0xFF3B82F6),
+                            size: 24,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  newTemplateFile != null
+                                      ? 'New: ${newTemplateFile!.path.split('/').last}'
+                                      : (_currentDoctorProfile.templatePath != null
+                                          ? 'Current: ${_currentDoctorProfile.templatePath!.split('/').last}'
+                                          : 'Default Vector Letterhead'),
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                                ),
+                                if (newTemplateFile?.path.toLowerCase().endsWith('.pdf') == true ||
+                                    (_currentDoctorProfile.templatePath?.toLowerCase().endsWith('.pdf') == true && newTemplateFile == null))
+                                  const Padding(
+                                    padding: EdgeInsets.only(top: 2),
+                                    child: Text(
+                                      'PDF Template (Page 1 imported)',
+                                      style: TextStyle(fontSize: 11, color: Color(0xFFDC2626), fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () async {
+                              final picked = await FilePicker.pickFiles(
+                                type: FileType.custom,
+                                allowedExtensions: ['pdf', 'png', 'jpg', 'jpeg', 'webp'],
+                              );
+                              if (picked.isNotEmpty && picked.first.path != null) {
+                                setDialogState(() {
+                                  newTemplateFile = File(picked.first.path!);
+                                });
+                              }
+                            },
+                            icon: const Icon(Icons.upload_file, size: 16),
+                            label: const Text('Change'),
+                          ),
+                          if (newTemplateFile != null)
+                            IconButton(
+                              icon: const Icon(Icons.close, size: 18, color: Colors.red),
+                              onPressed: () => setDialogState(() => newTemplateFile = null),
+                            ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
@@ -435,14 +517,11 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
-        elevation: 1,
         title: Row(
           children: [
-            const Icon(Icons.local_hospital, color: Colors.blueAccent, size: 24),
+            const LipiLogo(size: 24, borderRadius: 6),
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -453,13 +532,21 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                 ),
                 Text(
                   _currentDoctorProfile.name,
-                  style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context).appBarTheme.foregroundColor?.withValues(alpha: 0.8) ?? const Color(0xFF94A3B8),
+                  ),
                 ),
               ],
             ),
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.palette_outlined),
+            tooltip: 'Theme & Presentation',
+            onPressed: () => ThemeSettingsDialog.show(context, widget.dependencies.themeService),
+          ),
           IconButton(
             icon: const Icon(Icons.tune),
             tooltip: 'Configure Prescription Pad',

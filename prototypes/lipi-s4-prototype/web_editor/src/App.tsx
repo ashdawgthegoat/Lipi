@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Excalidraw, exportToSvg, exportToBlob } from '@excalidraw/excalidraw';
+import { Excalidraw, exportToSvg, exportToBlob, CaptureUpdateAction } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types';
 
@@ -32,6 +32,7 @@ interface InitData {
   date?: string;
   elements?: any[];
   debugMode?: 'standard' | 'testA' | 'testB';
+  theme?: any;
 }
 
 function generateSyntheticTestImage(): string {
@@ -126,8 +127,30 @@ export function App() {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [activeTool, setActiveTool] = useState<'pen' | 'eraser' | 'hand'>('pen');
   const [strokeColor, setStrokeColor] = useState<string>('#000000');
-  const [strokeWidth, setStrokeWidth] = useState<number>(1);
+  const [strokeWidth, setStrokeWidth] = useState<number>(2);
+  const [eraserRadius, setEraserRadius] = useState<number>(20);
   const [currentZoom, setCurrentZoom] = useState<number>(1.0);
+
+  const activeToolRef = useRef<'pen' | 'eraser' | 'hand'>('pen');
+  activeToolRef.current = activeTool;
+
+  const eraserRadiusRef = useRef<number>(20);
+  eraserRadiusRef.current = eraserRadius;
+
+  const zoomLabelRef = useRef<HTMLButtonElement | null>(null);
+  const eraserCursorRef = useRef<HTMLDivElement | null>(null);
+  const isStylusDownRef = useRef<boolean>(false);
+  const isErasingRef = useRef<boolean>(false);
+  const activeTouchesRef = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const lastSingleTouchRef = useRef<{ x: number; y: number } | null>(null);
+  const initialPinchDistRef = useRef<number>(0);
+  const initialPinchCenterRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+  const initialCameraRef = useRef<{ scrollX: number; scrollY: number; zoom: number }>({
+    scrollX: 0,
+    scrollY: 0,
+    zoom: 1.0,
+  });
+  const lastElementsHashRef = useRef<number>(0);
 
   // Buffered elements to load once Excalidraw API is ready (Fix B)
   const pendingElementsRef = useRef<any[] | null>(null);
@@ -165,11 +188,15 @@ export function App() {
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   apiRef.current = api;
 
-  // Direct GPU transform update on the DOM sheet container for 120Hz/144Hz synchronization
+  // Direct GPU transform update on the DOM sheet container with translate3d
   const updateSheetTransform = useCallback((scrollX: number, scrollY: number, zoomValue: number) => {
+    const prev = currentTransformRef.current;
+    if (prev.scrollX === scrollX && prev.scrollY === scrollY && prev.zoom === zoomValue) {
+      return;
+    }
     currentTransformRef.current = { scrollX, scrollY, zoom: zoomValue };
     if (sheetContainerRef.current) {
-      sheetContainerRef.current.style.transform = `translate(${scrollX * zoomValue}px, ${scrollY * zoomValue}px) scale(${zoomValue})`;
+      sheetContainerRef.current.style.transform = `translate3d(${scrollX * zoomValue}px, ${scrollY * zoomValue}px, 0) scale(${zoomValue})`;
     }
   }, []);
 
@@ -204,6 +231,9 @@ export function App() {
       });
       updateSheetTransform(initialScrollX, initialScrollY, targetZoom);
       setCurrentZoom(targetZoom);
+      if (zoomLabelRef.current) {
+        zoomLabelRef.current.textContent = `${Math.round(targetZoom * 100)}%`;
+      }
     },
     [pageInfo.width, pageInfo.height, updateSheetTransform],
   );
@@ -253,8 +283,9 @@ export function App() {
   const handleScrollChange = useCallback(
     (scrollX: number, scrollY: number, zoom: { value: number }) => {
       updateSheetTransform(scrollX, scrollY, zoom.value);
-      const rounded = Math.round(zoom.value * 100) / 100;
-      setCurrentZoom((prev) => (Math.abs(prev - rounded) > 0.01 ? rounded : prev));
+      if (zoomLabelRef.current) {
+        zoomLabelRef.current.textContent = `${Math.round(zoom.value * 100)}%`;
+      }
     },
     [updateSheetTransform],
   );
@@ -291,6 +322,9 @@ export function App() {
   // Switch to pen
   const setPenMode = useCallback(() => {
     setActiveTool('pen');
+    if (eraserCursorRef.current) {
+      eraserCursorRef.current.style.display = 'none';
+    }
     if (apiRef.current) {
       apiRef.current.updateScene({
         appState: {
@@ -308,7 +342,7 @@ export function App() {
     if (apiRef.current) {
       apiRef.current.updateScene({
         appState: {
-          activeTool: { type: 'eraser', customType: null, lastActiveTool: null, locked: true },
+          activeTool: { type: 'selection', customType: null, lastActiveTool: null, locked: true },
         },
       });
     }
@@ -317,6 +351,9 @@ export function App() {
   // Switch to hand/pan tool
   const setHandMode = useCallback(() => {
     setActiveTool('hand');
+    if (eraserCursorRef.current) {
+      eraserCursorRef.current.style.display = 'none';
+    }
     if (apiRef.current) {
       apiRef.current.updateScene({
         appState: {
@@ -325,6 +362,343 @@ export function App() {
       });
     }
   }, []);
+
+  // Erase strokes intersecting given client coordinates with selectable radius
+  const performEraseAt = useCallback((clientX: number, clientY: number) => {
+    if (!apiRef.current || !viewportRef.current) return;
+    const appState = apiRef.current.getAppState();
+    const rect = viewportRef.current.getBoundingClientRect();
+    const zoom = appState.zoom.value;
+    const scrollX = appState.scrollX;
+    const scrollY = appState.scrollY;
+
+    const sceneX = (clientX - rect.left) / zoom - scrollX;
+    const sceneY = (clientY - rect.top) / zoom - scrollY;
+
+    const radiusScene = eraserRadiusRef.current / zoom;
+    const r2 = radiusScene * radiusScene;
+
+    const elements = apiRef.current.getSceneElements();
+    let changed = false;
+
+    const distToSegmentSquared = (px: number, py: number, x1: number, y1: number, x2: number, y2: number) => {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const l2 = dx * dx + dy * dy;
+      if (l2 === 0) {
+        const sx = px - x1;
+        const sy = py - y1;
+        return sx * sx + sy * sy;
+      }
+      let t = ((px - x1) * dx + (py - y1) * dy) / l2;
+      t = Math.max(0, Math.min(1, t));
+      const projX = x1 + t * dx;
+      const projY = y1 + t * dy;
+      const ex = px - projX;
+      const ey = py - projY;
+      return ex * ex + ey * ey;
+    };
+
+    const newElements = elements.map((el) => {
+      if (el.isDeleted || el.type !== 'freedraw') return el;
+      if (
+        sceneX + radiusScene < el.x ||
+        sceneX - radiusScene > el.x + el.width ||
+        sceneY + radiusScene < el.y ||
+        sceneY - radiusScene > el.y + el.height
+      ) {
+        return el;
+      }
+
+      const points = el.points as [number, number][];
+      if (!points || points.length === 0) return el;
+
+      let hit = false;
+      if (points.length === 1) {
+        const gx = el.x + points[0][0];
+        const gy = el.y + points[0][1];
+        const d2 = (gx - sceneX) * (gx - sceneX) + (gy - sceneY) * (gy - sceneY);
+        if (d2 <= r2) hit = true;
+      } else {
+        for (let i = 0; i < points.length - 1; i++) {
+          const x1 = el.x + points[i][0];
+          const y1 = el.y + points[i][1];
+          const x2 = el.x + points[i + 1][0];
+          const y2 = el.y + points[i + 1][1];
+          if (distToSegmentSquared(sceneX, sceneY, x1, y1, x2, y2) <= r2) {
+            hit = true;
+            break;
+          }
+        }
+      }
+
+      if (hit) {
+        changed = true;
+        return { ...el, isDeleted: true };
+      }
+      return el;
+    });
+
+    if (changed) {
+      apiRef.current.updateScene({
+        elements: newElements,
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    }
+  }, []);
+
+  // Viewport pointer interception: stylus writes, fingers navigate (pan/pinch), finger never inks
+  useEffect(() => {
+    const vp = viewportRef.current;
+    if (!vp) return;
+
+    const onPointerDown = (e: PointerEvent) => {
+      if ((e.target as HTMLElement)?.closest('.floating-zoom-widget')) {
+        return;
+      }
+
+      // 1. Stylus handling
+      if (e.pointerType === 'pen') {
+        isStylusDownRef.current = true;
+        const isHardwareEraser = e.button === 5 || (e.buttons & 32) !== 0;
+        if (isHardwareEraser || activeToolRef.current === 'eraser') {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          isErasingRef.current = true;
+          performEraseAt(e.clientX, e.clientY);
+        }
+        return;
+      }
+
+      // 2. Mouse handling (preview & testing)
+      if (e.pointerType === 'mouse') {
+        if (activeToolRef.current === 'eraser') {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          isErasingRef.current = true;
+          performEraseAt(e.clientX, e.clientY);
+        }
+        return;
+      }
+
+      // 3. Touch handling (FINGER NAVIGATION ONLY)
+      if (e.pointerType === 'touch') {
+        // ALWAYS stop finger touch from reaching Excalidraw: prevents stray ink strokes!
+        e.stopImmediatePropagation();
+        e.preventDefault();
+
+        // If stylus is currently writing, reject touch as palm contact!
+        if (isStylusDownRef.current) {
+          return;
+        }
+
+        activeTouchesRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        if (activeTouchesRef.current.size === 1) {
+          lastSingleTouchRef.current = { x: e.clientX, y: e.clientY };
+        } else if (activeTouchesRef.current.size === 2) {
+          const touches = Array.from(activeTouchesRef.current.values());
+          initialPinchDistRef.current = Math.hypot(touches[1].x - touches[0].x, touches[1].y - touches[0].y);
+          initialPinchCenterRef.current = {
+            x: (touches[0].x + touches[1].x) / 2,
+            y: (touches[0].y + touches[1].y) / 2,
+          };
+          const appState = apiRef.current?.getAppState();
+          if (appState) {
+            initialCameraRef.current = {
+              scrollX: appState.scrollX,
+              scrollY: appState.scrollY,
+              zoom: appState.zoom.value,
+            };
+          }
+        }
+      }
+    };
+
+    const onPointerMove = (e: PointerEvent) => {
+      // 1. Stylus handling: immediate fast-path for handwriting with zero DOM overhead
+      if (e.pointerType === 'pen') {
+        const isHardwareEraser = (e.buttons & 32) !== 0;
+        if (isHardwareEraser || (activeToolRef.current === 'eraser' && isErasingRef.current)) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          performEraseAt(e.clientX, e.clientY);
+        }
+        return;
+      }
+
+      if ((e.target as HTMLElement)?.closest('.floating-zoom-widget')) {
+        return;
+      }
+
+      // Update floating eraser cursor position (mouse only)
+      if (activeToolRef.current === 'eraser' && eraserCursorRef.current) {
+        const vpRect = vp.getBoundingClientRect();
+        const inside =
+          e.clientX >= vpRect.left &&
+          e.clientX <= vpRect.right &&
+          e.clientY >= vpRect.top &&
+          e.clientY <= vpRect.bottom;
+
+        if (inside) {
+          const radius = eraserRadiusRef.current;
+          const diameter = radius * 2;
+          eraserCursorRef.current.style.display = 'block';
+          eraserCursorRef.current.style.width = `${diameter}px`;
+          eraserCursorRef.current.style.height = `${diameter}px`;
+          eraserCursorRef.current.style.left = `${e.clientX - vpRect.left}px`;
+          eraserCursorRef.current.style.top = `${e.clientY - vpRect.top}px`;
+        } else {
+          eraserCursorRef.current.style.display = 'none';
+        }
+      }
+
+      // 2. Mouse handling
+      if (e.pointerType === 'mouse') {
+        if (activeToolRef.current === 'eraser' && isErasingRef.current) {
+          e.stopImmediatePropagation();
+          e.preventDefault();
+          performEraseAt(e.clientX, e.clientY);
+        }
+        return;
+      }
+
+      // 3. Touch handling (FINGER NAVIGATION)
+      if (e.pointerType === 'touch') {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+
+        if (isStylusDownRef.current) return;
+        if (!activeTouchesRef.current.has(e.pointerId)) return;
+        activeTouchesRef.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+        if (!apiRef.current) return;
+        const appState = apiRef.current.getAppState();
+
+        if (activeTouchesRef.current.size === 1) {
+          // Single-finger smooth panning
+          const last = lastSingleTouchRef.current;
+          if (last) {
+            const dx = e.clientX - last.x;
+            const dy = e.clientY - last.y;
+            lastSingleTouchRef.current = { x: e.clientX, y: e.clientY };
+
+            const newScrollX = appState.scrollX + dx / appState.zoom.value;
+            const newScrollY = appState.scrollY + dy / appState.zoom.value;
+
+            apiRef.current.updateScene({
+              appState: {
+                scrollX: newScrollX,
+                scrollY: newScrollY,
+              },
+            });
+            updateSheetTransform(newScrollX, newScrollY, appState.zoom.value);
+          }
+        } else if (activeTouchesRef.current.size === 2) {
+          // Two-finger smooth pinch zoom + pan
+          const touches = Array.from(activeTouchesRef.current.values());
+          const currDist = Math.hypot(touches[1].x - touches[0].x, touches[1].y - touches[0].y);
+          const currCenter = {
+            x: (touches[0].x + touches[1].x) / 2,
+            y: (touches[0].y + touches[1].y) / 2,
+          };
+
+          const initDist = initialPinchDistRef.current;
+          const initCam = initialCameraRef.current;
+          if (initCam && initDist > 10) {
+            const scale = currDist / initDist;
+            const targetZoom = Math.max(0.3, Math.min(3.0, Math.round(initCam.zoom * scale * 100) / 100));
+
+            const vpRect = vp.getBoundingClientRect();
+            const initCenterX = initialPinchCenterRef.current.x - vpRect.left;
+            const initCenterY = initialPinchCenterRef.current.y - vpRect.top;
+            const currCenterX = currCenter.x - vpRect.left;
+            const currCenterY = currCenter.y - vpRect.top;
+
+            const sceneX = initCenterX / initCam.zoom - initCam.scrollX;
+            const sceneY = initCenterY / initCam.zoom - initCam.scrollY;
+
+            const newScrollX = currCenterX / targetZoom - sceneX;
+            const newScrollY = currCenterY / targetZoom - sceneY;
+
+            apiRef.current.updateScene({
+              appState: {
+                zoom: { value: targetZoom as any },
+                scrollX: newScrollX,
+                scrollY: newScrollY,
+              },
+            });
+            updateSheetTransform(newScrollX, newScrollY, targetZoom);
+
+            if (zoomLabelRef.current) {
+              zoomLabelRef.current.textContent = `${Math.round(targetZoom * 100)}%`;
+            }
+          }
+        }
+      }
+    };
+
+    const onPointerUp = (e: PointerEvent) => {
+      if ((e.target as HTMLElement)?.closest('.floating-zoom-widget')) {
+        return;
+      }
+
+      if (e.pointerType === 'pen') {
+        isStylusDownRef.current = false;
+        isErasingRef.current = false;
+        requestAnimationFrame(() => {
+          if (apiRef.current) {
+            handleChange(apiRef.current.getSceneElements(), apiRef.current.getAppState());
+          }
+        });
+        return;
+      }
+
+      if (e.pointerType === 'mouse') {
+        isErasingRef.current = false;
+        return;
+      }
+
+      if (e.pointerType === 'touch') {
+        e.stopImmediatePropagation();
+        e.preventDefault();
+        activeTouchesRef.current.delete(e.pointerId);
+
+        if (activeTouchesRef.current.size === 1) {
+          const remaining = activeTouchesRef.current.values().next().value;
+          if (remaining) {
+            lastSingleTouchRef.current = { x: remaining.x, y: remaining.y };
+          }
+        } else if (activeTouchesRef.current.size === 0) {
+          const currentZ = apiRef.current?.getAppState().zoom.value;
+          if (currentZ) {
+            setCurrentZoom(Math.round(currentZ * 100) / 100);
+          }
+        }
+      }
+    };
+
+    const onPointerLeave = () => {
+      if (eraserCursorRef.current) {
+        eraserCursorRef.current.style.display = 'none';
+      }
+      isErasingRef.current = false;
+    };
+
+    vp.addEventListener('pointerdown', onPointerDown, { capture: true, passive: false });
+    vp.addEventListener('pointermove', onPointerMove, { capture: true, passive: false });
+    vp.addEventListener('pointerup', onPointerUp, { capture: true, passive: false });
+    vp.addEventListener('pointercancel', onPointerUp, { capture: true, passive: false });
+    vp.addEventListener('pointerleave', onPointerLeave);
+
+    return () => {
+      vp.removeEventListener('pointerdown', onPointerDown, { capture: true });
+      vp.removeEventListener('pointermove', onPointerMove, { capture: true });
+      vp.removeEventListener('pointerup', onPointerUp, { capture: true });
+      vp.removeEventListener('pointercancel', onPointerUp, { capture: true });
+      vp.removeEventListener('pointerleave', onPointerLeave);
+    };
+  }, [performEraseAt, updateSheetTransform]);
 
   // Step zoom (+ / -) centered at viewport
   const handleZoomStep = useCallback(
@@ -355,6 +729,9 @@ export function App() {
       });
       updateSheetTransform(newScrollX, newScrollY, nextZ);
       setCurrentZoom(nextZ);
+      if (zoomLabelRef.current) {
+        zoomLabelRef.current.textContent = `${Math.round(nextZ * 100)}%`;
+      }
     },
     [updateSheetTransform],
   );
@@ -384,6 +761,9 @@ export function App() {
     });
     updateSheetTransform(centeredScrollX, centeredScrollY, normalizedZoom);
     setCurrentZoom(normalizedZoom);
+    if (zoomLabelRef.current) {
+      zoomLabelRef.current.textContent = `${Math.round(normalizedZoom * 100)}%`;
+    }
   }, [pxWidth, pxHeight, updateSheetTransform]);
 
   // Reset zoom to 1.0 (100%)
@@ -405,6 +785,9 @@ export function App() {
     });
     updateSheetTransform(centeredScrollX, centeredScrollY, zoom);
     setCurrentZoom(1.0);
+    if (zoomLabelRef.current) {
+      zoomLabelRef.current.textContent = '100%';
+    }
   }, [pxWidth, updateSheetTransform]);
 
   // Change color
@@ -437,15 +820,28 @@ export function App() {
 
   // Undo / Redo
   const handleUndo = useCallback(() => {
-    if (apiRef.current) {
-      (apiRef.current as any).history?.undo();
-    }
+    const event = new KeyboardEvent('keydown', {
+      key: 'z',
+      code: 'KeyZ',
+      ctrlKey: true,
+      metaKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    document.dispatchEvent(event);
   }, []);
 
   const handleRedo = useCallback(() => {
-    if (apiRef.current) {
-      (apiRef.current as any).history?.redo();
-    }
+    const event = new KeyboardEvent('keydown', {
+      key: 'z',
+      code: 'KeyZ',
+      ctrlKey: true,
+      metaKey: true,
+      shiftKey: true,
+      bubbles: true,
+      cancelable: true,
+    });
+    document.dispatchEvent(event);
   }, []);
 
   const handleClear = useCallback(() => {
@@ -489,6 +885,10 @@ export function App() {
         pendingElementsRef.current = data.elements;
       }
 
+      if (data.theme) {
+        (window as any).setLipiTheme(data.theme);
+      }
+
       if (data.debugMode) {
         console.log('[Lipi][TemplateDebug] Setting debugMode from initData:', data.debugMode);
         setDebugMode(data.debugMode);
@@ -500,6 +900,29 @@ export function App() {
         doctorName: data.doctor?.name,
       });
       return true;
+    };
+
+    (window as any).setLipiTheme = (themeData: any) => {
+      try {
+        const theme = typeof themeData === 'string' ? JSON.parse(themeData) : themeData;
+        if (!theme) return false;
+        const root = document.documentElement;
+        if (theme.toolbarBg) root.style.setProperty('--theme-toolbar-bg', theme.toolbarBg);
+        if (theme.canvasBg) root.style.setProperty('--theme-canvas-bg', theme.canvasBg);
+        if (theme.paperBg) root.style.setProperty('--theme-paper-bg', theme.paperBg);
+        if (theme.primary) root.style.setProperty('--theme-primary', theme.primary);
+        if (theme.border) root.style.setProperty('--theme-border', theme.border);
+        if (theme.textColor) root.style.setProperty('--theme-text-color', theme.textColor);
+        if (theme.sliderBg) root.style.setProperty('--theme-slider-bg', theme.sliderBg);
+        if (theme.zoomBg) root.style.setProperty('--theme-zoom-bg', theme.zoomBg);
+        if (theme.borderRadius !== undefined) root.style.setProperty('--theme-radius', `${theme.borderRadius}px`);
+        if (theme.buttonBorderRadius !== undefined) root.style.setProperty('--theme-btn-radius', `${theme.buttonBorderRadius}px`);
+        if (theme.borderWidth !== undefined) root.style.setProperty('--theme-border-width', `${theme.borderWidth}px`);
+        return true;
+      } catch (e) {
+        console.error('[Lipi][Theme] Error applying theme:', e);
+        return false;
+      }
     };
 
     (window as any).setTemplateDebugMode = (mode: string) => {
@@ -523,6 +946,16 @@ export function App() {
         elements,
         appState: { viewBackgroundColor: 'transparent' },
       });
+      return true;
+    };
+
+    (window as any).undoPrescription = () => {
+      handleUndo();
+      return true;
+    };
+
+    (window as any).redoPrescription = () => {
+      handleRedo();
       return true;
     };
 
@@ -620,18 +1053,39 @@ export function App() {
       if (appState?.zoom) {
         updateSheetTransform(appState.scrollX, appState.scrollY, appState.zoom.value);
       }
-      const activeElements = elements.filter((el) => !el.isDeleted);
-      postToFlutter({
-        type: 'INK_CHANGED',
-        strokeCount: activeElements.length,
-      });
+
+      // Never calculate element hashes or block on bridge IPC while the stylus is actively drawing
+      if (isStylusDownRef.current || appState?.newElement != null) {
+        return;
+      }
+
+      // Compute fast 32-bit djb2 hash over active elements
+      let hash = 5381;
+      let activeCount = 0;
+      for (let i = 0; i < elements.length; i++) {
+        const el = elements[i];
+        if (!el.isDeleted) {
+          activeCount++;
+          hash = (((hash << 5) + hash) ^ (el.version || 0) ^ (el.versionNonce || 0)) | 0;
+        }
+      }
+      hash = (((hash << 5) + hash) ^ activeCount) | 0;
+
+      // Only notify Flutter if element contents actually changed (prevents zoom stutter)
+      if (hash !== lastElementsHashRef.current) {
+        lastElementsHashRef.current = hash;
+        postToFlutter({
+          type: 'INK_CHANGED',
+          strokeCount: activeCount,
+        });
+      }
     },
     [postToFlutter, updateSheetTransform],
   );
 
   return (
     <div className="workspace-container">
-      {/* Top Toolbar */}
+      {/* Top Toolbar: Essential controls only */}
       <div className="workspace-toolbar">
         <div className="tool-group">
           <button
@@ -649,35 +1103,33 @@ export function App() {
             🧹 Eraser
           </button>
 
-          <div
-            className={`color-dot ${strokeColor === '#000000' ? 'active' : ''}`}
-            style={{ background: '#000000' }}
-            onClick={() => handleColorChange('#000000')}
-            title="Black Ink"
-          />
-          <div
-            className={`color-dot ${strokeColor === '#1a365d' ? 'active' : ''}`}
-            style={{ background: '#1a365d' }}
-            onClick={() => handleColorChange('#1a365d')}
-            title="Blue Ink"
-          />
-
-          <button
-            className={`tool-btn ${strokeWidth === 1 ? 'active' : ''}`}
-            style={{ padding: '0 8px', fontSize: '11px' }}
-            onClick={() => handleWidthChange(1)}
-            title="Fine Line"
-          >
-            Fine
-          </button>
-          <button
-            className={`tool-btn ${strokeWidth === 2 ? 'active' : ''}`}
-            style={{ padding: '0 8px', fontSize: '11px' }}
-            onClick={() => handleWidthChange(2)}
-            title="Medium Line"
-          >
-            Med
-          </button>
+          {/* Dynamic Contextual Size Slider */}
+          <div className="size-slider-wrapper">
+            <span className="size-slider-label">
+              {activeTool === 'eraser' ? `Eraser: ${eraserRadius}px` : `Pen: ${strokeWidth}px`}
+            </span>
+            <input
+              type="range"
+              className="size-slider-input"
+              min={activeTool === 'eraser' ? 6 : 1}
+              max={activeTool === 'eraser' ? 60 : 8}
+              step={activeTool === 'eraser' ? 2 : 0.5}
+              value={activeTool === 'eraser' ? eraserRadius : strokeWidth}
+              onChange={(e) => {
+                const val = parseFloat(e.target.value);
+                if (activeTool === 'eraser') {
+                  setEraserRadius(val);
+                  eraserRadiusRef.current = val;
+                  if (eraserCursorRef.current) {
+                    eraserCursorRef.current.style.width = `${val * 2}px`;
+                    eraserCursorRef.current.style.height = `${val * 2}px`;
+                  }
+                } else {
+                  handleWidthChange(val);
+                }
+              }}
+            />
+          </div>
         </div>
 
         <div className="tool-group">
@@ -689,60 +1141,6 @@ export function App() {
           </button>
           <button className="tool-btn" onClick={handleClear} title="Clear Page">
             🗑 Clear
-          </button>
-        </div>
-
-        {/* Prescription Document Zoom & Navigation Controls */}
-        <div className="tool-group" style={{ borderLeft: '1px solid #d0d7de', paddingLeft: '8px' }}>
-          <button
-            className={`tool-btn ${activeTool === 'hand' ? 'active' : ''}`}
-            onClick={setHandMode}
-            title="Pan (Hand Tool)"
-          >
-            ✋ Pan
-          </button>
-          <button className="tool-btn" onClick={() => handleZoomStep(-0.25)} title="Zoom Out">
-            🔍−
-          </button>
-          <button
-            className="tool-btn"
-            onClick={handleResetZoom}
-            title="Reset to 100% Zoom"
-            style={{ minWidth: '48px', textAlign: 'center', fontSize: '11px', fontWeight: 600 }}
-          >
-            {Math.round(currentZoom * 100)}%
-          </button>
-          <button className="tool-btn" onClick={() => handleZoomStep(0.25)} title="Zoom In">
-            🔍+
-          </button>
-          <button className="tool-btn" onClick={handleFitPage} title="Fit Entire Page in Viewport">
-            📄 Fit
-          </button>
-        </div>
-
-        {/* Forensic Debug Toolbar Group */}
-        <div className="tool-group" style={{ marginLeft: 'auto', borderLeft: '1px solid #d0d7de', paddingLeft: '8px' }}>
-          <span style={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>DEBUG:</span>
-          <button
-            className={`tool-btn ${debugMode === 'standard' ? 'active' : ''}`}
-            style={{ fontSize: '11px', padding: '0 6px' }}
-            onClick={() => setDebugMode('standard')}
-          >
-            Normal
-          </button>
-          <button
-            className={`tool-btn ${debugMode === 'testA' ? 'active' : ''}`}
-            style={{ fontSize: '11px', padding: '0 6px', color: '#dc2626' }}
-            onClick={() => setDebugMode('testA')}
-          >
-            Test A
-          </button>
-          <button
-            className={`tool-btn ${debugMode === 'testB' ? 'active' : ''}`}
-            style={{ fontSize: '11px', padding: '0 6px', color: '#16a34a' }}
-            onClick={() => setDebugMode('testB')}
-          >
-            Test B
           </button>
         </div>
       </div>
@@ -832,6 +1230,38 @@ export function App() {
         </div>
       ) : (
         <div className="page-viewport" ref={viewportRef}>
+          {/* Floating Vertical Zoom Controls Widget on top-right of page */}
+          <div className="floating-zoom-widget">
+            <button
+              className="zoom-widget-btn"
+              onClick={() => handleZoomStep(0.25)}
+              title="Zoom In"
+              aria-label="Zoom In"
+            >
+              🔍+
+            </button>
+            <button
+              ref={zoomLabelRef}
+              className="zoom-widget-btn zoom-widget-label"
+              onClick={handleResetZoom}
+              title="Reset to 100% Zoom"
+              aria-label="Reset Zoom"
+            >
+              {Math.round(currentZoom * 100)}%
+            </button>
+            <button
+              className="zoom-widget-btn"
+              onClick={() => handleZoomStep(-0.25)}
+              title="Zoom Out"
+              aria-label="Zoom Out"
+            >
+              🔍−
+            </button>
+          </div>
+
+          {/* Floating Circular Eraser Cursor */}
+          <div ref={eraserCursorRef} className="eraser-cursor" />
+
           {/* 1. Transformed Prescription Document / Page Container: Spatially locked with Excalidraw camera */}
           <div
             ref={sheetContainerRef}
@@ -840,7 +1270,7 @@ export function App() {
               width: `${pxWidth}px`,
               height: `${pxHeight}px`,
               transformOrigin: '0 0',
-              transform: `translate(${currentTransformRef.current.scrollX * currentTransformRef.current.zoom}px, ${currentTransformRef.current.scrollY * currentTransformRef.current.zoom}px) scale(${currentTransformRef.current.zoom})`,
+              transform: `translate3d(${currentTransformRef.current.scrollX * currentTransformRef.current.zoom}px, ${currentTransformRef.current.scrollY * currentTransformRef.current.zoom}px, 0) scale(${currentTransformRef.current.zoom})`,
             }}
           >
             <div
@@ -923,6 +1353,7 @@ export function App() {
               UIOptions={uiOptions}
               onChange={handleChange}
               onScrollChange={handleScrollChange}
+              handleKeyboardGlobally={true}
             />
           </div>
         </div>

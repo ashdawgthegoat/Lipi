@@ -5,6 +5,7 @@ import 'package:path/path.dart' as p;
 import '../../domains/doctor/doctor_repository.dart';
 import '../../domains/doctor/models/doctor_profile.dart';
 import '../../domains/doctor/models/template_config.dart';
+import '../../infrastructure/templates/template_processor.dart';
 import '../../infrastructure/vault/vault.dart';
 import '../../shared/errors/lipi_error.dart';
 import '../../shared/result/result.dart';
@@ -31,23 +32,32 @@ class ConfigureDoctorWorkflow {
     try {
       String? templateRelativePath = profile.templateConfig.customTemplatePath;
 
-      // 1. If custom template file is provided, import to Vault templates dir
-      if (customTemplateFile != null && await customTemplateFile.exists()) {
-        final ext = p.extension(customTemplateFile.path).toLowerCase();
-        final destRelPath = p.join('doctor', 'templates', 'custom_template$ext');
-        final bytes = await customTemplateFile.readAsBytes();
-        await vault.fs.writeBytes(destRelPath, bytes);
+      // 1. If custom template file or bytes are provided, process via TemplateProcessor
+      if ((customTemplateFile != null && await customTemplateFile.exists()) ||
+          (customTemplateBytes != null && customTemplateBytes.isNotEmpty)) {
+        final processed = await TemplateProcessor.process(
+          file: customTemplateFile,
+          bytes: customTemplateBytes,
+          filename: customTemplateFile?.path ?? 'template$templateExtension',
+        );
+
+        final destRelPath = p.join('doctor', 'templates', 'custom_template${processed.extension}');
+        await vault.fs.writeBytes(destRelPath, processed.imageBytes);
         templateRelativePath = destRelPath;
-      } else if (customTemplateBytes != null && customTemplateBytes.isNotEmpty) {
-        final destRelPath = p.join('doctor', 'templates', 'custom_template$templateExtension');
-        await vault.fs.writeBytes(destRelPath, customTemplateBytes);
-        templateRelativePath = destRelPath;
+
+        // If source was a PDF, also preserve the original PDF document in the vault
+        if (processed.isPdf && processed.originalPdfBytes != null) {
+          final pdfRelPath = p.join('doctor', 'templates', 'custom_template_original.pdf');
+          await vault.fs.writeBytes(pdfRelPath, processed.originalPdfBytes!);
+        }
       }
 
       final updatedProfile = profile.copyWith(
         templateConfig: profile.templateConfig.copyWith(
           customTemplatePath: templateRelativePath,
-          clearCustomTemplate: customTemplateFile == null && customTemplateBytes == null && profile.templateConfig.customTemplatePath == null,
+          clearCustomTemplate: customTemplateFile == null &&
+              customTemplateBytes == null &&
+              profile.templateConfig.customTemplatePath == null,
         ),
       );
 
@@ -81,6 +91,7 @@ class ConfigureTemplateWorkflow {
     required TemplateConfig templateConfig,
     File? customTemplateFile,
     Uint8List? customTemplateBytes,
+    String templateExtension = '.png',
   }) async {
     final profileRes = await doctorRepository.getProfile();
     if (profileRes.isFailure) return Failure(profileRes.errorOrNull!);
@@ -95,6 +106,7 @@ class ConfigureTemplateWorkflow {
       profile: updated,
       customTemplateFile: customTemplateFile,
       customTemplateBytes: customTemplateBytes,
+      templateExtension: templateExtension,
     );
   }
 }
