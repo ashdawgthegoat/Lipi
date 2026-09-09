@@ -102,6 +102,9 @@ class _ThemeSettingsDialogState extends State<ThemeSettingsDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    
     return ValueListenableBuilder<LipiTheme>(
       valueListenable: widget.themeService.activeThemeNotifier,
       builder: (context, activeTheme, _) {
@@ -124,26 +127,26 @@ class _ThemeSettingsDialogState extends State<ThemeSettingsDialog> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
+                  Text(
                     'Select a presentation theme. Themes affect interface styling and borders only; clinical records and encryption are strictly preserved.',
-                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                    style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
                   ),
                   const SizedBox(height: 16),
                   if (_statusMessage != null) ...[
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        color: _isError ? const Color(0xFFFEE2E2) : const Color(0xFFDCFCE7),
+                        color: _isError ? cs.error.withValues(alpha: 0.1) : cs.tertiary.withValues(alpha: 0.1),
                         borderRadius: BorderRadius.circular(6),
                         border: Border.all(
-                          color: _isError ? const Color(0xFFF87171) : const Color(0xFF4ADE80),
+                          color: _isError ? cs.error : cs.tertiary,
                         ),
                       ),
                       child: Text(
                         _statusMessage!,
                         style: TextStyle(
                           fontSize: 12,
-                          color: _isError ? const Color(0xFF991B1B) : const Color(0xFF166534),
+                          color: _isError ? cs.error : cs.tertiary,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -188,7 +191,7 @@ class _ThemeSettingsDialogState extends State<ThemeSettingsDialog> {
                                     : Icons.radio_button_off,
                                 color: isSelected
                                     ? theme.colors.primary
-                                    : Colors.grey,
+                                    : cs.onSurfaceVariant,
                                 size: 22,
                               ),
                               const SizedBox(width: 12),
@@ -214,7 +217,7 @@ class _ThemeSettingsDialogState extends State<ThemeSettingsDialog> {
                                           decoration: BoxDecoration(
                                             color: theme.isBuiltIn
                                                 ? theme.colors.primaryContainer
-                                                : const Color(0xFFFEF3C7),
+                                                : cs.secondaryContainer,
                                             borderRadius: BorderRadius.circular(4),
                                           ),
                                           child: Text(
@@ -224,7 +227,7 @@ class _ThemeSettingsDialogState extends State<ThemeSettingsDialog> {
                                               fontWeight: FontWeight.w600,
                                               color: theme.isBuiltIn
                                                   ? theme.colors.primary
-                                                  : const Color(0xFF92400E),
+                                                  : cs.onSecondaryContainer,
                                             ),
                                           ),
                                         ),
@@ -233,7 +236,7 @@ class _ThemeSettingsDialogState extends State<ThemeSettingsDialog> {
                                     const SizedBox(height: 4),
                                     Text(
                                       theme.description,
-                                      style: const TextStyle(fontSize: 12, color: Colors.black54),
+                                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                     ),
@@ -243,13 +246,13 @@ class _ThemeSettingsDialogState extends State<ThemeSettingsDialog> {
                               const SizedBox(width: 12),
 
                               // Palette swatches
-                              _buildPalettePreview(theme),
+                              _buildMiniaturePreview(theme),
 
                               // Custom theme delete button
                               if (!theme.isBuiltIn) ...[
                                 const SizedBox(width: 8),
                                 IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent),
+                                  icon: Icon(Icons.delete_outline, size: 20, color: cs.error),
                                   tooltip: 'Delete custom theme',
                                   onPressed: () => _handleDeleteTheme(theme),
                                 ),
@@ -280,35 +283,68 @@ class _ThemeSettingsDialogState extends State<ThemeSettingsDialog> {
     );
   }
 
-  Widget _buildPalettePreview(LipiTheme theme) {
-    final swatches = [
-      theme.colors.primary,
-      theme.colors.appBarBg,
-      theme.colors.background,
-      theme.colors.accent,
-    ];
-
+  Widget _buildMiniaturePreview(LipiTheme previewTheme) {
     return Container(
-      padding: const EdgeInsets.all(3),
+      width: 60,
+      height: 60,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: Colors.grey.shade300),
+        color: previewTheme.colors.background,
+        borderRadius: BorderRadius.circular(previewTheme.shapes.borderRadius),
+        border: Border.all(color: previewTheme.colors.border, width: previewTheme.shapes.borderWidth),
       ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: swatches.map((c) {
-          return Container(
-            width: 16,
-            height: 16,
-            margin: const EdgeInsets.symmetric(horizontal: 1.5),
-            decoration: BoxDecoration(
-              color: c,
-              borderRadius: BorderRadius.circular(2),
-              border: Border.all(color: Colors.black12, width: 0.5),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: [
+          // Mock AppBar
+          Container(
+            height: 14,
+            color: previewTheme.colors.appBarBg,
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: Container(
+              width: 20,
+              height: 4,
+              decoration: BoxDecoration(
+                color: previewTheme.colors.appBarFg,
+                borderRadius: BorderRadius.circular(1),
+              ),
             ),
-          );
-        }).toList(),
+          ),
+          const Spacer(),
+          // Mock Card
+          Container(
+            height: 24,
+            margin: const EdgeInsets.symmetric(horizontal: 4),
+            decoration: BoxDecoration(
+              color: previewTheme.colors.surface,
+              borderRadius: BorderRadius.circular(previewTheme.shapes.cardBorderRadius),
+              border: Border.all(color: previewTheme.colors.border, width: previewTheme.shapes.borderWidth),
+            ),
+            padding: const EdgeInsets.all(4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Mock text line
+                Container(
+                  width: double.infinity,
+                  height: 3,
+                  color: previewTheme.colors.mutedText,
+                  margin: const EdgeInsets.only(bottom: 3),
+                ),
+                // Mock button
+                Container(
+                  width: 24,
+                  height: 6,
+                  decoration: BoxDecoration(
+                    color: previewTheme.colors.primary,
+                    borderRadius: BorderRadius.circular(previewTheme.shapes.buttonBorderRadius),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Spacer(),
+        ],
       ),
     );
   }

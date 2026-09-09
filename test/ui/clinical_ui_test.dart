@@ -53,6 +53,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
 
       await tester.pumpWidget(MaterialApp(
+        theme: deps.themeService.activeTheme.toThemeData(),
         home: FirstLaunchScreen(dependencies: deps),
       ));
       await tester.pump();
@@ -100,6 +101,7 @@ void main() {
       });
 
       await tester.pumpWidget(MaterialApp(
+        theme: deps.themeService.activeTheme.toThemeData(),
         home: MainWorkspaceScreen(
           dependencies: deps,
           doctorProfile: doctorProfile,
@@ -155,6 +157,7 @@ void main() {
       });
 
       await tester.pumpWidget(MaterialApp(
+        theme: deps.themeService.activeTheme.toThemeData(),
         home: PatientWorkspaceScreen(
           dependencies: deps,
           doctorProfile: doctorProfile,
@@ -208,6 +211,7 @@ void main() {
       });
 
       await tester.pumpWidget(MaterialApp(
+        theme: deps.themeService.activeTheme.toThemeData(),
         home: PatientWorkspaceScreen(
           dependencies: deps,
           doctorProfile: doctorProfile,
@@ -305,6 +309,7 @@ void main() {
       addTearDown(() => tester.binding.setSurfaceSize(null));
 
       await tester.pumpWidget(MaterialApp(
+        theme: deps.themeService.activeTheme.toThemeData(),
         home: PrescriptionWorkspaceScreen(
           dependencies: deps,
           doctorProfile: doctorProfile,

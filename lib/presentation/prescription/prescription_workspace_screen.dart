@@ -15,6 +15,7 @@ import '../../infrastructure/documents/autosave_controller.dart';
 import '../../infrastructure/documents/save_state.dart';
 import '../../infrastructure/export/pdf_exporter.dart';
 import '../../infrastructure/ink/inkml_converter.dart';
+import '../../infrastructure/themes/theme_model.dart';
 import '../../shared/ids/ids.dart';
 
 class PrescriptionWorkspaceScreen extends StatefulWidget {
@@ -318,8 +319,12 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
   }
 
   Widget _buildSaveStatusPill(SaveState state) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final ext = theme.extension<LipiExtendedColors>()!;
+
     String label = 'Saved';
-    Color color = Colors.greenAccent;
+    Color color = ext.success;
     IconData icon = Icons.check;
 
     if (state.isSaving) {
@@ -333,11 +338,11 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
       );
     } else if (state.isDirty) {
       label = 'Unsaved changes';
-      color = Colors.amberAccent;
+      color = ext.warning;
       icon = Icons.edit;
     } else if (state.hasError) {
       label = 'Save error';
-      color = Colors.redAccent;
+      color = cs.error;
       icon = Icons.error_outline;
     }
 

@@ -100,6 +100,7 @@ void main() {
 
     await tester.pumpWidget(
       MaterialApp(
+        theme: deps.themeService.activeTheme.toThemeData(),
         home: PatientWorkspaceScreen(
           dependencies: deps,
           doctorProfile: doctor,

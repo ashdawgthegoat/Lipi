@@ -18,6 +18,8 @@ void main() {
       expect(vista.styleType, equals('vista'));
       expect(vista.isBuiltIn, isTrue);
       expect(vista.colors.paperBg, equals(const Color(0xFFFFFFFF)));
+      expect(vista.colors.folderBg, equals(const Color(0xFFFFFFFF)));
+      expect(vista.colors.folderTabBg, equals(const Color(0xFFE2EDF8)));
 
       final retro = BuiltInThemes.sixteenBitLight;
       expect(retro.id, equals('sixteen-bit-light'));
@@ -25,19 +27,28 @@ void main() {
       expect(retro.isBuiltIn, isTrue);
       expect(retro.shapes.borderWidth, equals(2.0));
       expect(retro.colors.paperBg, equals(const Color(0xFFFFFFFF)));
+      expect(retro.colors.folderBg, equals(const Color(0xFFD4D0C8)));
     });
 
-    test('LipiTheme toThemeData generates valid ThemeData without error', () {
+    test('LipiTheme toThemeData generates valid ThemeData and LipiExtendedColors', () {
       final vistaThemeData = BuiltInThemes.vistaLight.toThemeData();
       expect(vistaThemeData.brightness, equals(Brightness.light));
       expect(vistaThemeData.colorScheme.primary, equals(BuiltInThemes.vistaLight.colors.primary));
+      final vistaExt = vistaThemeData.extension<LipiExtendedColors>();
+      expect(vistaExt, isNotNull);
+      expect(vistaExt!.isVista, isTrue);
+      expect(vistaExt.isRetro, isFalse);
 
       final retroThemeData = BuiltInThemes.sixteenBitLight.toThemeData();
       expect(retroThemeData.brightness, equals(Brightness.light));
       expect(retroThemeData.colorScheme.primary, equals(BuiltInThemes.sixteenBitLight.colors.primary));
+      final retroExt = retroThemeData.extension<LipiExtendedColors>();
+      expect(retroExt, isNotNull);
+      expect(retroExt!.isRetro, isTrue);
+      expect(retroExt.isVista, isFalse);
     });
 
-    test('LipiTheme serialization roundtrip preserves colors and shapes', () {
+    test('LipiTheme serialization roundtrip preserves colors, folder tokens, and shapes', () {
       final original = BuiltInThemes.vistaLight;
       final json = original.toJson();
       final restored = LipiTheme.fromJson(json, isBuiltIn: true);
@@ -47,7 +58,25 @@ void main() {
       expect(restored.version, equals('1.0'));
       expect(restored.colors.primary, equals(original.colors.primary));
       expect(restored.colors.canvasBg, equals(original.colors.canvasBg));
+      expect(restored.colors.folderBg, equals(original.colors.folderBg));
+      expect(restored.colors.folderTabBg, equals(original.colors.folderTabBg));
       expect(restored.shapes.borderRadius, equals(original.shapes.borderRadius));
+    });
+
+    test('ThemeColors handles missing optional folder tokens with backward compatibility', () {
+      final minimalJson = {
+        'primary': '#1A365D',
+        'surface': '#FFFFFF',
+        'background': '#F8FAFC',
+        'onPrimary': '#FFFFFF',
+        'onSurface': '#0F172A',
+        'border': '#E2E8F0',
+        'appBarBg': '#1A365D',
+      };
+      final colors = ThemeColors.fromJson(minimalJson);
+      expect(colors.folderBg, equals(const Color(0xFFFFFFFF)));
+      expect(colors.folderTabBg, isNotNull);
+      expect(colors.folderBorder, isNotNull);
     });
 
     test('toWebThemeJson produces correct web css variables', () {

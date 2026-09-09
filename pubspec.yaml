@@ -78,6 +78,8 @@ flutter:
     - assets/web/
     - assets/web/assets/
     - assets/branding/
+    - assets/icons/vista/
+    - assets/icons/sixteen_bit/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

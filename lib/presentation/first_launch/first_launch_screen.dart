@@ -5,6 +5,7 @@ import '../../app/dependencies.dart';
 import '../../domains/doctor/models/doctor_preferences.dart';
 import '../../domains/doctor/models/doctor_profile.dart';
 import '../../domains/doctor/models/template_config.dart';
+import '../../infrastructure/themes/theme_model.dart';
 import '../../shared/ids/ids.dart';
 import '../patients/main_workspace_screen.dart';
 import '../widgets/lipi_logo.dart';
@@ -124,13 +125,13 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
+    final ext = theme.extension<LipiExtendedColors>()!;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF1F5F9),
       appBar: AppBar(
         title: const Text('Lipi — Clinical Setup', style: TextStyle(fontWeight: FontWeight.bold)),
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
-        elevation: 0,
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -154,24 +155,24 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF1A365D).withValues(alpha: 0.1),
+                              color: cs.primary.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const LipiLogo(size: 32, borderRadius: 8),
                           ),
                           const SizedBox(width: 16),
-                          const Expanded(
+                          Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   'Doctor & Clinic Profile',
-                                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
+                                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: cs.onSurface),
                                 ),
-                                SizedBox(height: 4),
+                                const SizedBox(height: 4),
                                 Text(
                                   'Configure your identity and prescription pad dimensions.',
-                                  style: TextStyle(fontSize: 14, color: Color(0xFF64748B)),
+                                  style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
                                 ),
                               ],
                             ),
@@ -233,14 +234,14 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
                       const Divider(height: 36),
 
                       // Prescription Pad Geometry
-                      const Text(
+                      Text(
                         'Prescription Pad Dimensions',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: cs.onSurface),
                       ),
                       const SizedBox(height: 8),
-                      const Text(
+                      Text(
                         'Default printable canvas area in millimeters (mm).',
-                        style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                        style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
                       ),
                       const SizedBox(height: 12),
                       Row(
@@ -279,15 +280,15 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
                         margin: const EdgeInsets.only(bottom: 12),
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFEFF6FF),
+                          color: cs.primaryContainer,
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFBFDBFE)),
+                          border: Border.all(color: cs.primaryContainer),
                         ),
-                        child: const Row(
+                        child: Row(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Icon(Icons.picture_as_pdf_outlined, color: Color(0xFF1D4ED8), size: 22),
-                            SizedBox(width: 10),
+                            Icon(Icons.picture_as_pdf_outlined, color: cs.primary, size: 22),
+                            const SizedBox(width: 10),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -297,15 +298,15 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
                                     style: TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 13,
-                                      color: Color(0xFF1E3A8A),
+                                      color: cs.primary,
                                     ),
                                   ),
-                                  SizedBox(height: 2),
+                                  const SizedBox(height: 2),
                                   Text(
                                     'You can also upload an image of the template (.png, .jpg).',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: Color(0xFF1E40AF),
+                                      color: cs.primary,
                                     ),
                                   ),
                                 ],
@@ -319,9 +320,9 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
                       Container(
                         padding: const EdgeInsets.all(16),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF8FAFC),
+                          color: cs.surfaceContainerLowest,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          border: Border.all(color: cs.outlineVariant),
                         ),
                         child: Row(
                           children: [
@@ -329,7 +330,7 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
                               _customTemplateFile?.path.toLowerCase().endsWith('.pdf') == true
                                   ? Icons.picture_as_pdf
                                   : Icons.image,
-                              color: const Color(0xFF3B82F6),
+                              color: cs.secondary,
                               size: 28,
                             ),
                             const SizedBox(width: 14),
@@ -348,12 +349,12 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFFDC2626).withValues(alpha: 0.1),
+                                          color: cs.error.withValues(alpha: 0.1),
                                           borderRadius: BorderRadius.circular(4),
                                         ),
-                                        child: const Text(
+                                        child: Text(
                                           'PDF Template (Page 1 imported)',
-                                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFFDC2626)),
+                                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: cs.error),
                                         ),
                                       ),
                                     ),
@@ -363,7 +364,7 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
                                         : 'Using default vector clinic letterhead',
                                     style: TextStyle(
                                       fontSize: 12,
-                                      color: _customTemplateFile != null ? Colors.green[700] : const Color(0xFF64748B),
+                                      color: _customTemplateFile != null ? ext.success : cs.onSurfaceVariant,
                                     ),
                                   ),
                                 ],
@@ -376,7 +377,7 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
                             ),
                             if (_customTemplateFile != null)
                               IconButton(
-                                icon: const Icon(Icons.close, size: 18, color: Colors.red),
+                                icon: Icon(Icons.close, size: 18, color: cs.error),
                                 onPressed: () => setState(() => _customTemplateFile = null),
                               ),
                           ],
@@ -391,15 +392,15 @@ class _FirstLaunchScreenState extends State<FirstLaunchScreen> {
                         child: ElevatedButton(
                           onPressed: _isSaving ? null : _saveAndContinue,
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF1A365D),
-                            foregroundColor: Colors.white,
+                            backgroundColor: cs.primary,
+                            foregroundColor: cs.onPrimary,
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                           child: _isSaving
-                              ? const SizedBox(
+                              ? SizedBox(
                                   width: 24,
                                   height: 24,
-                                  child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                                  child: CircularProgressIndicator(color: cs.onPrimary, strokeWidth: 2.5),
                                 )
                               : const Text(
                                   'Save & Enter Workspace',

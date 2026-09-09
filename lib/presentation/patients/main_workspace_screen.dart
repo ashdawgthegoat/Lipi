@@ -11,7 +11,9 @@ import '../../shared/ids/ids.dart';
 import '../patient/patient_workspace_screen.dart';
 import '../prescription/prescription_workspace_screen.dart';
 import '../settings/theme_settings_dialog.dart';
+import '../widgets/file_manager/lipi_file_manager_icons.dart';
 import '../widgets/lipi_logo.dart';
+import 'widgets/patient_folder_item.dart';
 
 class MainWorkspaceScreen extends StatefulWidget {
   final LipiDependencies dependencies;
@@ -31,6 +33,7 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
   late DoctorProfile _currentDoctorProfile;
   final _searchController = TextEditingController();
   List<Patient> _patients = [];
+  Map<String, int> _patientVisitCounts = {};
   bool _isLoading = false;
 
   @override
@@ -51,10 +54,17 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
     final result = await widget.dependencies.searchPatientsWorkflow.execute(query);
     if (!mounted) return;
 
-    result.fold(
-      onSuccess: (list) {
+    await result.fold(
+      onSuccess: (list) async {
+        final counts = <String, int>{};
+        for (final p in list) {
+          final cRes = await widget.dependencies.consultationRepository.getConsultationsForPatient(p.id);
+          counts[p.id.value] = cRes.valueOrNull?.length ?? 0;
+        }
+        if (!mounted) return;
         setState(() {
           _patients = list;
+          _patientVisitCounts = counts;
           _isLoading = false;
         });
       },
@@ -127,6 +137,7 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
         return StatefulBuilder(
           builder: (dialogCtx, setDialogState) {
             return AlertDialog(
@@ -222,8 +233,8 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                 ),
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A365D),
-                    foregroundColor: Colors.white,
+                    backgroundColor: cs.primary,
+                    foregroundColor: cs.onPrimary,
                   ),
                   onPressed: () async {
                     if (!formKey.currentState!.validate()) return;
@@ -271,13 +282,14 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
     showDialog(
       context: context,
       builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
         return StatefulBuilder(
           builder: (dialogCtx, setDialogState) {
             return AlertDialog(
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: const Row(
+              title: Row(
                 children: [
-                  Icon(Icons.tune, color: Color(0xFF1A365D)),
+                  Icon(Icons.tune, color: cs.primary),
                   SizedBox(width: 10),
                   Text('Prescription Pad & Letterhead', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ],
@@ -288,7 +300,7 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Dimensions in millimeters (mm):', style: TextStyle(fontSize: 13, color: Color(0xFF64748B))),
+                    Text('Dimensions in millimeters (mm):', style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -324,14 +336,14 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                       margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFEFF6FF),
+                        color: cs.primaryContainer,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFBFDBFE)),
+                        border: Border.all(color: cs.primaryContainer),
                       ),
-                      child: const Row(
+                      child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(Icons.picture_as_pdf_outlined, color: Color(0xFF1D4ED8), size: 20),
+                          Icon(Icons.picture_as_pdf_outlined, color: cs.primary, size: 20),
                           SizedBox(width: 10),
                           Expanded(
                             child: Column(
@@ -342,7 +354,7 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                                   style: TextStyle(
                                     fontWeight: FontWeight.bold,
                                     fontSize: 12,
-                                    color: Color(0xFF1E3A8A),
+                                    color: cs.primary,
                                   ),
                                 ),
                                 SizedBox(height: 2),
@@ -350,7 +362,7 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                                   'You can also upload an image of the template (.png, .jpg).',
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: Color(0xFF1E40AF),
+                                    color: cs.primary,
                                   ),
                                 ),
                               ],
@@ -366,21 +378,17 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFFF8FAFC),
+                        color: cs.surfaceContainerLowest,
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: const Color(0xFFE2E8F0)),
+                        border: Border.all(color: cs.outlineVariant),
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            (newTemplateFile?.path.toLowerCase().endsWith('.pdf') ??
-                                    _currentDoctorProfile.templatePath?.toLowerCase().endsWith('.pdf') ??
-                                    false)
-                                ? Icons.picture_as_pdf
-                                : Icons.image,
-                            color: const Color(0xFF3B82F6),
-                            size: 24,
-                          ),
+                          (newTemplateFile?.path.toLowerCase().endsWith('.pdf') ??
+                                  _currentDoctorProfile.templatePath?.toLowerCase().endsWith('.pdf') ??
+                                  false)
+                              ? const LipiFileIcon(type: LipiIconType.filePdf, size: 28)
+                              : const LipiFileIcon(type: LipiIconType.fileImage, size: 28),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
@@ -392,15 +400,15 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                                       : (_currentDoctorProfile.templatePath != null
                                           ? 'Current: ${_currentDoctorProfile.templatePath!.split('/').last}'
                                           : 'Default Vector Letterhead'),
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1E293B)),
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: cs.onSurface),
                                 ),
                                 if (newTemplateFile?.path.toLowerCase().endsWith('.pdf') == true ||
                                     (_currentDoctorProfile.templatePath?.toLowerCase().endsWith('.pdf') == true && newTemplateFile == null))
-                                  const Padding(
-                                    padding: EdgeInsets.only(top: 2),
+                                  Padding(
+                                    padding: const EdgeInsets.only(top: 2),
                                     child: Text(
                                       'PDF Template (Page 1 imported)',
-                                      style: TextStyle(fontSize: 11, color: Color(0xFFDC2626), fontWeight: FontWeight.bold),
+                                      style: TextStyle(fontSize: 11, color: cs.error, fontWeight: FontWeight.bold),
                                     ),
                                   ),
                               ],
@@ -423,7 +431,7 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                           ),
                           if (newTemplateFile != null)
                             IconButton(
-                              icon: const Icon(Icons.close, size: 18, color: Colors.red),
+                              icon: Icon(Icons.close, size: 18, color: cs.error),
                               onPressed: () => setDialogState(() => newTemplateFile = null),
                             ),
                         ],
@@ -435,7 +443,7 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
               actions: [
                 TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
                 ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A365D), foregroundColor: Colors.white),
+                  style: ElevatedButton.styleFrom(backgroundColor: cs.primary, foregroundColor: cs.onPrimary),
                   onPressed: () async {
                     final nav = Navigator.of(ctx);
                     final width = double.tryParse(widthCtrl.text) ?? 180.0;
@@ -481,13 +489,15 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
   void _confirmDeletePatient(Patient patient) {
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
+      builder: (ctx) {
+        final cs = Theme.of(ctx).colorScheme;
+        return AlertDialog(
         title: const Text('Confirm Patient Deletion'),
         content: Text('Are you sure you want to delete ${patient.name} and all associated prescriptions? This cannot be undone.'),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
             onPressed: () async {
               final nav = Navigator.of(ctx);
               final delRes = await widget.dependencies.deletePatientWorkflow.execute(patient.id);
@@ -510,12 +520,15 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
             child: const Text('Delete'),
           ),
         ],
-      ),
+      );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
@@ -534,7 +547,7 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                   _currentDoctorProfile.name,
                   style: TextStyle(
                     fontSize: 12,
-                    color: Theme.of(context).appBarTheme.foregroundColor?.withValues(alpha: 0.8) ?? const Color(0xFF94A3B8),
+                    color: Theme.of(context).appBarTheme.foregroundColor?.withValues(alpha: 0.8) ?? cs.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -559,7 +572,7 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
         children: [
           // Search and Action Bar
           Container(
-            color: Colors.white,
+            color: cs.surface,
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
             child: Row(
               children: [
@@ -580,10 +593,10 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                             )
                           : null,
                       filled: true,
-                      fillColor: const Color(0xFFF8FAFC),
+                      fillColor: cs.surfaceContainerLowest,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                        borderSide: BorderSide(color: cs.outlineVariant),
                       ),
                       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     ),
@@ -595,8 +608,8 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                   icon: const Icon(Icons.person_add, size: 18),
                   label: const Text('New Patient'),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF1A365D),
-                    foregroundColor: Colors.white,
+                    backgroundColor: cs.primary,
+                    foregroundColor: cs.onPrimary,
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
@@ -604,7 +617,7 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
               ],
             ),
           ),
-          const Divider(height: 1, color: Color(0xFFE2E8F0)),
+          const Divider(height: 1),
 
           // Patients List
           Expanded(
@@ -615,88 +628,48 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(Icons.people_outline, size: 64, color: Colors.grey[400]),
+                            _searchController.text.isEmpty
+                                ? const LipiFolderIcon(isOpen: true, size: 80)
+                                : Icon(Icons.search_off, size: 64, color: cs.outline),
                             const SizedBox(height: 16),
                             Text(
                               _searchController.text.isEmpty
                                   ? 'No patients registered yet'
                                   : 'No matching patients found',
-                              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+                              style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant),
                             ),
                             const SizedBox(height: 12),
                             if (_searchController.text.isEmpty)
                               ElevatedButton(
                                 onPressed: _showNewPatientDialog,
-                                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF1A365D), foregroundColor: Colors.white),
+                                style: ElevatedButton.styleFrom(backgroundColor: cs.primary, foregroundColor: cs.onPrimary),
                                 child: const Text('Register First Patient'),
                               ),
                           ],
                         ),
                       )
-                    : ListView.separated(
-                        padding: const EdgeInsets.all(20),
-                        itemCount: _patients.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 12),
-                        itemBuilder: (context, index) {
-                          final patient = _patients[index];
-                          return Card(
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            elevation: 1,
-                            child: InkWell(
-                              borderRadius: BorderRadius.circular(12),
+                      : GridView.builder(
+                          padding: const EdgeInsets.all(24),
+                          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 220,
+                            mainAxisSpacing: 24,
+                            crossAxisSpacing: 24,
+                            childAspectRatio: 0.94,
+                          ),
+                          itemCount: _patients.length,
+                          itemBuilder: (context, index) {
+                            final patient = _patients[index];
+                            final visitCount = _patientVisitCounts[patient.id.value] ?? 0;
+                            return PatientFolderItem(
+                              key: Key('patient_folder_${patient.id.value}'),
+                              patient: patient,
+                              visitCount: visitCount,
                               onTap: () => _openPatientWorkspace(patient),
-                              child: Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Row(
-                                  children: [
-                                    CircleAvatar(
-                                      radius: 24,
-                                      backgroundColor: const Color(0xFF1A365D).withValues(alpha: 0.1),
-                                      child: Text(
-                                        patient.name.isNotEmpty ? patient.name[0].toUpperCase() : '?',
-                                        style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1A365D), fontSize: 18),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            patient.name,
-                                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF0F172A)),
-                                          ),
-                                          const SizedBox(height: 4),
-                                          Text(
-                                            '${patient.age} Y • ${patient.gender} • ${patient.city}',
-                                            style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    OutlinedButton.icon(
-                                      onPressed: () => _openPatientWorkspace(patient, startPrescriptionImmediately: true),
-                                      icon: const Icon(Icons.edit_note, size: 18),
-                                      label: const Text('New Rx'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: const Color(0xFF1A365D),
-                                        side: const BorderSide(color: Color(0xFF1A365D)),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 10),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete_outline, color: Colors.grey, size: 20),
-                                      tooltip: 'Delete Patient',
-                                      onPressed: () => _confirmDeletePatient(patient),
-                                    ),
-                                    const Icon(Icons.chevron_right, color: Colors.grey),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                              onNewRx: () => _openPatientWorkspace(patient, startPrescriptionImmediately: true),
+                              onDelete: () => _confirmDeletePatient(patient),
+                            );
+                          },
+                        ),
           ),
         ],
       ),

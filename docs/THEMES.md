@@ -71,7 +71,13 @@ Every theme package is defined by a `theme.json` root manifest:
     "accent": "#F59E0B",
     "canvasBg": "#E6F4EA",
     "paperBg": "#FFFFFF",
-    "sliderBg": "#E0F2FE"
+    "sliderBg": "#E0F2FE",
+    "error": "#D93025",
+    "success": "#107C10",
+    "warning": "#FBBC04",
+    "mutedText": "#7B8FA4",
+    "inputBg": "#F7F9FC",
+    "selectedBg": "#D6E8F7"
   },
   "shapes": {
     "borderRadius": 8.0,
@@ -102,6 +108,15 @@ Every theme package is defined by a `theme.json` root manifest:
 | `colors.appBarFg` | string | Yes | Top navigation app bar title and icon color. |
 | `colors.canvasBg` | string | Yes | Prescription page viewport desk background surrounding the document. |
 | `colors.paperBg` | string | Yes | Background of the prescription page sheet (must remain light/white). |
+| `colors.error` | string | No | Color for destructive/error states. |
+| `colors.success` | string | No | Color for success states. |
+| `colors.warning` | string | No | Color for warning states. |
+| `colors.mutedText` | string | No | Color for secondary/muted text. |
+| `colors.inputBg` | string | No | Background color for input fields. |
+| `colors.selectedBg` | string | No | Background color for selected items. |
+| `colors.folderBg` | string | No | Interior background color for patient record folders. |
+| `colors.folderTabBg` | string | No | Tab header background color for patient folders. |
+| `colors.folderBorder` | string | No | Outline border color for patient folders. |
 | `shapes.borderRadius` | number | Yes | Corner radius for input fields, dialogs, and widgets. |
 | `shapes.borderWidth` | number | Yes | Stroke width for card and toolbar outlines (e.g. `1.0` for modern, `2.0` for retro). |
 
