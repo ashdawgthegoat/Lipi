@@ -7,6 +7,7 @@ import '../../domains/doctor/models/doctor_profile.dart';
 import '../../domains/doctor/models/template_config.dart';
 import '../../domains/patient/models/patient.dart';
 import '../../domains/patient/models/patient_info.dart';
+import '../../infrastructure/themes/theme_model.dart';
 import '../../shared/ids/ids.dart';
 import '../patient/patient_workspace_screen.dart';
 import '../prescription/prescription_workspace_screen.dart';
@@ -486,41 +487,170 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
     );
   }
 
+  void _showPatientContextualDialog(Patient patient) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final cs = theme.colorScheme;
+        final ext = theme.extension<LipiExtendedColors>();
+        final isRetro = ext?.isRetro ?? false;
+
+        return AlertDialog(
+          shape: isRetro
+              ? const RoundedRectangleBorder(borderRadius: BorderRadius.zero)
+              : RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const LipiFolderIcon(isOpen: false, size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      patient.name,
+                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      '${patient.age} Y • ${patient.gender} • ${patient.city}',
+                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.folder_open, color: cs.primary),
+                title: const Text('Open Patient Folder'),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _openPatientWorkspace(patient);
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.delete_outline,
+                  color: isRetro ? const Color(0xFF800000) : cs.error,
+                ),
+                title: Text(
+                  'Delete Patient',
+                  style: TextStyle(
+                    color: isRetro ? const Color(0xFF800000) : cs.error,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: const Text('Permanently remove patient and all records'),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _confirmDeletePatient(patient);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _confirmDeletePatient(Patient patient) {
     showDialog(
       context: context,
       builder: (ctx) {
-        final cs = Theme.of(ctx).colorScheme;
-        return AlertDialog(
-        title: const Text('Confirm Patient Deletion'),
-        content: Text('Are you sure you want to delete ${patient.name} and all associated prescriptions? This cannot be undone.'),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: cs.error, foregroundColor: cs.onError),
-            onPressed: () async {
-              final nav = Navigator.of(ctx);
-              final delRes = await widget.dependencies.deletePatientWorkflow.execute(patient.id);
-              nav.pop();
+        final theme = Theme.of(ctx);
+        final cs = theme.colorScheme;
+        final ext = theme.extension<LipiExtendedColors>();
+        final isRetro = ext?.isRetro ?? false;
 
-              delRes.fold(
-                onSuccess: (_) {
-                  _loadPatients(_searchController.text.trim());
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Patient ${patient.name} deleted')),
-                  );
-                },
-                onFailure: (err) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Failed to delete patient: ${err.message}')),
-                  );
-                },
-              );
-            },
-            child: const Text('Delete'),
+        return AlertDialog(
+          shape: isRetro
+              ? const RoundedRectangleBorder(borderRadius: BorderRadius.zero)
+              : RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: isRetro ? const Color(0xFF800000) : cs.error, size: 26),
+              const SizedBox(width: 10),
+              const Text('Confirm Patient Deletion', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
           ),
-        ],
-      );
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Are you sure you want to delete ${patient.name} and all associated prescriptions? This cannot be undone.',
+                style: TextStyle(fontSize: 14, height: 1.4, color: cs.onSurface),
+              ),
+              const SizedBox(height: 14),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isRetro ? const Color(0xFFE4E0D8) : cs.surfaceContainerLowest,
+                  borderRadius: isRetro ? null : BorderRadius.circular(8),
+                  border: Border.all(color: isRetro ? const Color(0xFF808080) : cs.outlineVariant),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Patient: ${patient.name}',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: cs.onSurface)),
+                    const SizedBox(height: 4),
+                    Text('${patient.age} Years • ${patient.gender} • ${patient.city}',
+                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: isRetro ? const Color(0xFF800000) : cs.error,
+                foregroundColor: isRetro ? Colors.white : cs.onError,
+              ),
+              onPressed: () async {
+                final nav = Navigator.of(ctx);
+                final delRes = await widget.dependencies.deletePatientWorkflow.execute(patient.id);
+                nav.pop();
+
+                delRes.fold(
+                  onSuccess: (_) {
+                    _loadPatients(_searchController.text.trim());
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Patient ${patient.name} deleted')),
+                    );
+                  },
+                  onFailure: (err) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Failed to delete patient: ${err.message}')),
+                    );
+                  },
+                );
+              },
+              child: const Text('Delete'),
+            ),
+          ],
+        );
       },
     );
   }
@@ -581,7 +711,7 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                     controller: _searchController,
                     onChanged: (val) => _loadPatients(val.trim()),
                     decoration: InputDecoration(
-                      hintText: 'Search patients by name, city, or ID...',
+                      hintText: 'Search patients by name or city...',
                       prefixIcon: const Icon(Icons.search),
                       suffixIcon: _searchController.text.isNotEmpty
                           ? IconButton(
@@ -634,7 +764,7 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                             const SizedBox(height: 16),
                             Text(
                               _searchController.text.isEmpty
-                                  ? 'No patients registered yet'
+                                   ? 'No patients registered yet'
                                   : 'No matching patients found',
                               style: TextStyle(fontSize: 16, color: cs.onSurfaceVariant),
                             ),
@@ -667,6 +797,7 @@ class _MainWorkspaceScreenState extends State<MainWorkspaceScreen> {
                               onTap: () => _openPatientWorkspace(patient),
                               onNewRx: () => _openPatientWorkspace(patient, startPrescriptionImmediately: true),
                               onDelete: () => _confirmDeletePatient(patient),
+                              onLongPress: () => _showPatientContextualDialog(patient),
                             );
                           },
                         ),

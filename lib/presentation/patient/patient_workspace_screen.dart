@@ -139,6 +139,88 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
     );
   }
 
+  void _showPrescriptionContextualDialog(Consultation consultation) {
+    final dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final theme = Theme.of(ctx);
+        final cs = theme.colorScheme;
+        final ext = theme.extension<LipiExtendedColors>();
+        final isRetro = ext?.isRetro ?? false;
+
+        return AlertDialog(
+          shape: isRetro
+              ? const RoundedRectangleBorder(borderRadius: BorderRadius.zero)
+              : RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          title: Row(
+            children: [
+              const LipiFileIcon(type: LipiIconType.file, size: 28),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      dateFormat.format(consultation.createdAt),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      'Status: ${consultation.status.name.toUpperCase()}',
+                      style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(Icons.open_in_new, color: cs.primary),
+                title: const Text('Open Prescription'),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _reopenPrescription(consultation);
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.delete_outline,
+                  color: isRetro ? const Color(0xFF800000) : cs.error,
+                ),
+                title: Text(
+                  'Delete Prescription',
+                  style: TextStyle(
+                    color: isRetro ? const Color(0xFF800000) : cs.error,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: const Text('Permanently remove this prescription sheet'),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _confirmDeletePrescription(consultation);
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _confirmDeletePrescription(Consultation consultation) async {
     final dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
     final confirmed = await showDialog<bool>(
@@ -147,12 +229,16 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
       builder: (ctx) {
         final theme = Theme.of(ctx);
         final cs = theme.colorScheme;
+        final ext = theme.extension<LipiExtendedColors>();
+        final isRetro = ext?.isRetro ?? false;
         
         return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          shape: isRetro
+              ? const RoundedRectangleBorder(borderRadius: BorderRadius.zero)
+              : RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: cs.error, size: 28),
+              Icon(Icons.warning_amber_rounded, color: isRetro ? const Color(0xFF800000) : cs.error, size: 28),
               const SizedBox(width: 10),
               const Text('Delete Prescription?'),
             ],
@@ -170,21 +256,21 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
                 width: double.infinity,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: cs.surfaceContainerLowest,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: cs.outlineVariant),
+                  color: isRetro ? const Color(0xFFE4E0D8) : cs.surfaceContainerLowest,
+                  borderRadius: isRetro ? null : BorderRadius.circular(8),
+                  border: Border.all(color: isRetro ? const Color(0xFF808080) : cs.outlineVariant),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Date: ${dateFormat.format(consultation.createdAt)}',
+                    Text('Patient: ${widget.patient.name}',
                         style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13, color: cs.onSurface)),
+                    const SizedBox(height: 4),
+                    Text('Date: ${dateFormat.format(consultation.createdAt)}',
+                        style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
                     const SizedBox(height: 4),
                     Text('Status: ${consultation.status.name.toUpperCase()}',
                         style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant)),
-                    const SizedBox(height: 4),
-                    Text('ID: ${consultation.id.value}',
-                        style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
                   ],
                 ),
               ),
@@ -197,8 +283,8 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: cs.error,
-                foregroundColor: cs.onError,
+                backgroundColor: isRetro ? const Color(0xFF800000) : cs.error,
+                foregroundColor: isRetro ? Colors.white : cs.onError,
               ),
               onPressed: () => Navigator.of(ctx).pop(true),
               child: const Text('Delete Permanently'),
@@ -249,9 +335,6 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
     
     final patient = widget.patient;
     final isRetro = ext.isRetro;
-    final shortPatientId = patient.id.value.length > 8
-        ? patient.id.value.substring(0, 8).toUpperCase()
-        : patient.id.value.toUpperCase();
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
@@ -302,7 +385,7 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            isRetro ? 'FILE DOSSIER: $shortPatientId' : 'PATIENT DOSSIER #$shortPatientId',
+                            isRetro ? 'FILE DOSSIER' : 'PATIENT DOSSIER',
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
@@ -389,14 +472,6 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 12),
-                            Text(
-                              'Patient ID: ${patient.id.value}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isRetro ? const Color(0xFF505050) : cs.onSurfaceVariant,
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -461,7 +536,7 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
               controller: _searchController,
               onChanged: (val) => _loadConsultations(query: val.trim()),
               decoration: InputDecoration(
-                hintText: 'Search prescriptions by date (e.g. 2026-09-08, Sep) or ID...',
+                hintText: 'Search prescriptions by date (e.g. 2026-09-08, Sep)...',
                 hintStyle: TextStyle(
                   fontSize: 13,
                   color: isRetro ? const Color(0xFF808080) : cs.onSurfaceVariant.withValues(alpha: 0.7),
@@ -563,7 +638,7 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
                             const SizedBox(height: 6),
                             Text(
                               _searchQuery.isNotEmpty
-                                  ? 'Try searching with another date format or consultation ID'
+                                  ? 'Try searching with another date format'
                                   : 'This patient folder is empty. Create the first clinical prescription.',
                               style: TextStyle(
                                 fontSize: 13,
@@ -639,6 +714,7 @@ class _PatientWorkspaceScreenState extends State<PatientWorkspaceScreen> {
                               consultation: con,
                               onOpen: () => _reopenPrescription(con),
                               onDelete: () => _confirmDeletePrescription(con),
+                              onLongPress: () => _showPrescriptionContextualDialog(con),
                             );
                           },
                         ),

@@ -16,12 +16,14 @@ class PrescriptionFileItem extends StatefulWidget {
   final Consultation consultation;
   final VoidCallback onOpen;
   final VoidCallback onDelete;
+  final VoidCallback? onLongPress;
 
   const PrescriptionFileItem({
     super.key,
     required this.consultation,
     required this.onOpen,
     required this.onDelete,
+    this.onLongPress,
   });
 
   @override
@@ -47,9 +49,6 @@ class _PrescriptionFileItemState extends State<PrescriptionFileItem> {
     final con = widget.consultation;
     final dateFormat = DateFormat('dd MMM yyyy, hh:mm a');
     final formattedDate = dateFormat.format(con.createdAt);
-    final shortId = con.id.value.length > 8
-        ? con.id.value.substring(0, 8).toUpperCase()
-        : con.id.value.toUpperCase();
 
     final isRetro = ext.isRetro;
 
@@ -63,13 +62,20 @@ class _PrescriptionFileItemState extends State<PrescriptionFileItem> {
           widget.onOpen();
         },
         onTapCancel: () => setState(() => _isPressed = false),
+        onLongPress: () {
+          setState(() => _isPressed = false);
+          (widget.onLongPress ?? widget.onDelete)();
+        },
+        onSecondaryTap: () {
+          (widget.onLongPress ?? widget.onDelete)();
+        },
         child: AnimatedScale(
           scale: _isPressed ? 0.96 : (_isHovered ? 1.02 : 1.0),
           duration: const Duration(milliseconds: 120),
           curve: Curves.easeOutCubic,
           child: isRetro
-              ? _buildRetro16BitFile(context, cs, ext, con, formattedDate, shortId)
-              : _buildVistaAeroFile(context, cs, ext, con, formattedDate, shortId),
+              ? _buildRetro16BitFile(context, cs, ext, con, formattedDate)
+              : _buildVistaAeroFile(context, cs, ext, con, formattedDate),
         ),
       ),
     );
@@ -84,7 +90,6 @@ class _PrescriptionFileItemState extends State<PrescriptionFileItem> {
     LipiExtendedColors ext,
     Consultation con,
     String formattedDate,
-    String shortId,
   ) {
     final isSaved = con.status.name == 'saved';
     final statusColor = isSaved ? ext.success : cs.secondary;
@@ -177,7 +182,7 @@ class _PrescriptionFileItemState extends State<PrescriptionFileItem> {
           ),
           const SizedBox(height: 2),
 
-          // 4. Secondary Label: Status & Doc ID
+          // 4. Secondary Label: Status
           Text(
             'Status: ${con.status.name.toUpperCase()}',
             maxLines: 1,
@@ -187,17 +192,6 @@ class _PrescriptionFileItemState extends State<PrescriptionFileItem> {
               fontSize: 10.5,
               fontWeight: FontWeight.w600,
               color: statusColor,
-            ),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            'Doc #$shortId',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 10,
-              color: cs.onSurfaceVariant,
             ),
           ),
           const SizedBox(height: 6),
@@ -248,7 +242,6 @@ class _PrescriptionFileItemState extends State<PrescriptionFileItem> {
     LipiExtendedColors ext,
     Consultation con,
     String formattedDate,
-    String shortId,
   ) {
     const darkShadow = Color(0xFF000000);
     const shadowGray = Color(0xFF808080);
@@ -341,7 +334,7 @@ class _PrescriptionFileItemState extends State<PrescriptionFileItem> {
           ),
           const SizedBox(height: 2),
 
-          // 4. Secondary Label: Status & Doc ID
+          // 4. Secondary Label: Status
           Text(
             'Status: ${con.status.name.toUpperCase()}',
             maxLines: 1,
@@ -351,17 +344,6 @@ class _PrescriptionFileItemState extends State<PrescriptionFileItem> {
               fontSize: 9.5,
               fontWeight: FontWeight.bold,
               color: isSaved ? const Color(0xFF008000) : const Color(0xFF000080),
-            ),
-          ),
-          const SizedBox(height: 1),
-          Text(
-            '#$shortId',
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 9.5,
-              color: Color(0xFF505050),
             ),
           ),
           const SizedBox(height: 5),

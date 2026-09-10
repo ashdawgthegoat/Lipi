@@ -474,7 +474,7 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Flexible(child: Text('Consultation ID: ${widget.consultationId.value.substring(0, 8)}', style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)), overflow: TextOverflow.ellipsis)),
+                    Flexible(child: Text('Patient: ${widget.patient.name}', style: const TextStyle(fontSize: 11, color: Color(0xFF94A3B8)), overflow: TextOverflow.ellipsis)),
                     const SizedBox(width: 8),
                     const Flexible(child: Text('Doctor Signature: __________________', style: TextStyle(fontSize: 11, color: Color(0xFF64748B)), overflow: TextOverflow.ellipsis)),
                   ],

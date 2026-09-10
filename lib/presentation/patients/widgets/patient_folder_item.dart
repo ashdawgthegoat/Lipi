@@ -17,6 +17,7 @@ class PatientFolderItem extends StatefulWidget {
   final VoidCallback onTap;
   final VoidCallback onNewRx;
   final VoidCallback onDelete;
+  final VoidCallback? onLongPress;
 
   const PatientFolderItem({
     super.key,
@@ -25,6 +26,7 @@ class PatientFolderItem extends StatefulWidget {
     required this.onTap,
     required this.onNewRx,
     required this.onDelete,
+    this.onLongPress,
   });
 
   @override
@@ -59,6 +61,13 @@ class _PatientFolderItemState extends State<PatientFolderItem> {
           widget.onTap();
         },
         onTapCancel: () => setState(() => _isPressed = false),
+        onLongPress: () {
+          setState(() => _isPressed = false);
+          (widget.onLongPress ?? widget.onDelete)();
+        },
+        onSecondaryTap: () {
+          (widget.onLongPress ?? widget.onDelete)();
+        },
         child: AnimatedScale(
           scale: _isPressed ? 0.96 : (_isHovered ? 1.02 : 1.0),
           duration: const Duration(milliseconds: 120),
@@ -80,9 +89,6 @@ class _PatientFolderItemState extends State<PatientFolderItem> {
     LipiExtendedColors ext,
   ) {
     final patient = widget.patient;
-    final shortId = patient.id.value.length > 8
-        ? patient.id.value.substring(0, 8).toUpperCase()
-        : patient.id.value.toUpperCase();
 
     final iconState = _isPressed
         ? LipiIconState.pressed
@@ -146,7 +152,7 @@ class _PatientFolderItemState extends State<PatientFolderItem> {
               border: Border.all(color: ext.folderBorder, width: 0.8),
             ),
             child: Text(
-              'RECORD #$shortId',
+              'PATIENT RECORD',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -257,9 +263,6 @@ class _PatientFolderItemState extends State<PatientFolderItem> {
     LipiExtendedColors ext,
   ) {
     final patient = widget.patient;
-    final shortId = patient.id.value.length > 8
-        ? patient.id.value.substring(0, 8).toUpperCase()
-        : patient.id.value.toUpperCase();
 
     const whiteHighlight = Color(0xFFFFFFFF);
     const shadowGray = Color(0xFF808080);
@@ -328,11 +331,11 @@ class _PatientFolderItemState extends State<PatientFolderItem> {
                 bottom: BorderSide(color: shadowGray, width: 1.0),
               ),
             ),
-            child: Text(
-              'FILE: $shortId',
+            child: const Text(
+              'PATIENT FILE',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 9.5,
                 fontWeight: FontWeight.bold,
                 letterSpacing: 0.2,

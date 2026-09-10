@@ -61,7 +61,8 @@ void main() {
       expect(find.byType(LipiFolderIcon), findsOneWidget);
 
       // Check Aero folder tab and labels
-      expect(find.text('RECORD #PAT-TEST'), findsOneWidget);
+      expect(find.text('PATIENT RECORD'), findsOneWidget);
+      expect(find.textContaining('PAT-TEST'), findsNothing);
       expect(find.text('Arun Gupta'), findsOneWidget);
       expect(find.text('48 Y • Male • Mumbai'), findsOneWidget);
       expect(find.text('5 Prescriptions'), findsOneWidget);
@@ -110,7 +111,8 @@ void main() {
       expect(find.byType(LipiFolderIcon), findsOneWidget);
 
       // Check 16-bit retro folder tab and labels
-      expect(find.text('FILE: PAT-TEST'), findsOneWidget);
+      expect(find.text('PATIENT FILE'), findsOneWidget);
+      expect(find.textContaining('PAT-TEST'), findsNothing);
       expect(find.text('Arun Gupta'), findsOneWidget);
       expect(find.text('48 Y • Male • Mumbai'), findsOneWidget);
       expect(find.text('0 Visits'), findsOneWidget);
@@ -122,6 +124,38 @@ void main() {
 
       await tester.tap(find.text('New Rx'));
       expect(newRxTapped, isTrue);
+    });
+
+    testWidgets('PatientFolderItem triggers onLongPress without firing onTap', (tester) async {
+      bool tapped = false;
+      bool longPressed = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: BuiltInThemes.vistaLight.toThemeData(),
+          home: Scaffold(
+            body: SizedBox(
+              width: 220,
+              height: 240,
+              child: PatientFolderItem(
+                patient: patient,
+                visitCount: 2,
+                onTap: () => tapped = true,
+                onNewRx: () {},
+                onDelete: () {},
+                onLongPress: () => longPressed = true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(PatientFolderItem));
+      await tester.pumpAndSettle();
+
+      expect(longPressed, isTrue);
+      expect(tapped, isFalse);
     });
   });
 
@@ -183,7 +217,8 @@ void main() {
       expect(find.text('08 Sep 2026, 11:15 AM'), findsOneWidget);
       expect(find.text('Prescription'), findsOneWidget);
       expect(find.text('Status: SAVED'), findsOneWidget);
-      expect(find.textContaining('Doc #RX-TEST-'), findsOneWidget);
+      expect(find.textContaining('Doc #'), findsNothing);
+      expect(find.textContaining('RX-TEST'), findsNothing);
       expect(find.text('Open'), findsOneWidget);
       expect(find.byKey(const Key('delete_prescription_rx-test-9988')), findsOneWidget);
 
@@ -225,7 +260,7 @@ void main() {
       expect(find.text('08 Sep 2026, 11:15 AM'), findsOneWidget);
       expect(find.text('FILE: RX'), findsOneWidget);
       expect(find.text('Status: SAVED'), findsOneWidget);
-      expect(find.textContaining('#RX-TEST-'), findsOneWidget);
+      expect(find.textContaining('#RX-TEST'), findsNothing);
       expect(find.text('Open'), findsOneWidget);
       expect(find.byKey(const Key('delete_prescription_rx-test-9988')), findsOneWidget);
 
@@ -234,6 +269,36 @@ void main() {
 
       await tester.tap(find.byKey(const Key('delete_prescription_rx-test-9988')));
       expect(deleted, isTrue);
+    });
+
+    testWidgets('PrescriptionFileItem triggers onLongPress without firing onOpen', (tester) async {
+      bool opened = false;
+      bool longPressed = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: BuiltInThemes.vistaLight.toThemeData(),
+          home: Scaffold(
+            body: SizedBox(
+              width: 200,
+              height: 250,
+              child: PrescriptionFileItem(
+                consultation: consultation,
+                onOpen: () => opened = true,
+                onDelete: () {},
+                onLongPress: () => longPressed = true,
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byType(PrescriptionFileItem));
+      await tester.pumpAndSettle();
+
+      expect(longPressed, isTrue);
+      expect(opened, isFalse);
     });
   });
 
