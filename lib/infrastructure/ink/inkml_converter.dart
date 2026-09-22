@@ -1,19 +1,16 @@
-import 'dart:math';
-import 'package:uuid/uuid.dart';
 import 'package:xml/xml.dart';
 import '../../domains/consultation/models/ink_document.dart';
 import '../../domains/consultation/models/stroke.dart';
 import '../../domains/consultation/models/stroke_point.dart';
 import '../../shared/errors/lipi_error.dart';
 
-/// Converts between canonical Lipi [InkDocument], W3C InkML XML, and Excalidraw elements.
+/// Converts between canonical Lipi [InkDocument] and standard W3C InkML XML.
 ///
 /// Follows ADR-0005:
-/// - Canonical ink is stored as W3C InkML inside the .lipi package.
-/// - Excalidraw freedraw strokes are translated strictly through this boundary.
+/// - Canonical digital ink is persisted as W3C InkML inside the durable .lipi package.
+/// - Stroke coordinates, pressure (force channel F), stroke color, and stroke width
+///   are preserved with exact fidelity.
 class InkMLConverter {
-  static const _uuid = Uuid();
-
   /// Converts an [InkDocument] to a W3C InkML XML string.
   static String inkDocumentToInkML(InkDocument inkDoc) {
     final builder = XmlBuilder();
@@ -96,109 +93,5 @@ class InkMLConverter {
     } catch (e, st) {
       throw DocumentError('Malformed InkML XML content', e, st);
     }
-  }
-
-  /// Converts Excalidraw scene elements to an [InkDocument].
-  static InkDocument excalidrawToInkDocument(List<dynamic> elements) {
-    final strokes = <Stroke>[];
-
-    for (final el in elements) {
-      if (el is! Map<String, dynamic>) continue;
-      if (el['type'] != 'freedraw') continue;
-      if (el['isDeleted'] == true) continue;
-
-      final double originX = (el['x'] as num?)?.toDouble() ?? 0.0;
-      final double originY = (el['y'] as num?)?.toDouble() ?? 0.0;
-      final strokeColor = (el['strokeColor'] as String?) ?? '#000000';
-      final strokeWidth = (el['strokeWidth'] as num?)?.toDouble() ?? 1.0;
-
-      final pointsList = el['points'] as List<dynamic>? ?? [];
-      final pressuresList = el['pressures'] as List<dynamic>? ?? [];
-
-      if (pointsList.isEmpty) continue;
-
-      final points = <StrokePoint>[];
-      for (int i = 0; i < pointsList.length; i++) {
-        final pt = pointsList[i] as List<dynamic>;
-        final double dx = (pt[0] as num).toDouble();
-        final double dy = (pt[1] as num).toDouble();
-        final double absX = originX + dx;
-        final double absY = originY + dy;
-        final double p = (i < pressuresList.length && pressuresList[i] is num)
-            ? (pressuresList[i] as num).toDouble()
-            : 0.5;
-
-        points.add(StrokePoint(x: absX, y: absY, pressure: p.clamp(0.0, 1.0)));
-      }
-
-      strokes.add(Stroke(
-        points: points,
-        color: strokeColor,
-        strokeWidth: strokeWidth > 0 ? strokeWidth : 1.0,
-      ));
-    }
-
-    return InkDocument(strokes: strokes);
-  }
-
-  /// Converts an [InkDocument] into Excalidraw freedraw element dictionaries.
-  static List<Map<String, dynamic>> inkDocumentToExcalidraw(InkDocument inkDoc) {
-    final elements = <Map<String, dynamic>>[];
-
-    for (final stroke in inkDoc.strokes) {
-      if (stroke.points.isEmpty) continue;
-
-      double minX = double.infinity;
-      double minY = double.infinity;
-      double maxX = -double.infinity;
-      double maxY = -double.infinity;
-
-      for (final pt in stroke.points) {
-        minX = min(minX, pt.x);
-        minY = min(minY, pt.y);
-        maxX = max(maxX, pt.x);
-        maxY = max(maxY, pt.y);
-      }
-
-      final width = max(1.0, maxX - minX);
-      final height = max(1.0, maxY - minY);
-
-      final relativePoints = <List<double>>[];
-      final pressures = <double>[];
-
-      for (final pt in stroke.points) {
-        relativePoints.add([pt.x - minX, pt.y - minY]);
-        pressures.add(pt.pressure);
-      }
-
-      elements.add({
-        'id': 'ink_${_uuid.v4().substring(0, 8)}',
-        'type': 'freedraw',
-        'x': minX,
-        'y': minY,
-        'width': width,
-        'height': height,
-        'angle': 0,
-        'strokeColor': stroke.color,
-        'backgroundColor': 'transparent',
-        'fillStyle': 'solid',
-        'strokeWidth': stroke.strokeWidth,
-        'strokeStyle': 'solid',
-        'roughness': 0,
-        'opacity': 100,
-        'groupIds': [],
-        'frameId': null,
-        'roundness': null,
-        'seed': 12345,
-        'version': 1,
-        'versionNonce': 1,
-        'isDeleted': false,
-        'points': relativePoints,
-        'pressures': pressures,
-        'simulatePressure': false,
-      });
-    }
-
-    return elements;
   }
 }

@@ -1050,13 +1050,16 @@ export function App() {
   // Track stroke changes to inform Flutter
   const handleChange = useCallback(
     (elements: readonly any[], appState: any) => {
-      if (appState?.zoom) {
-        updateSheetTransform(appState.scrollX, appState.scrollY, appState.zoom.value);
-      }
-
-      // Never calculate element hashes or block on bridge IPC while the stylus is actively drawing
+      // Fast-path: skip ALL work while the stylus is actively drawing.
+      // During pen-down the camera (scrollX/scrollY/zoom) never changes,
+      // so sheet-transform sync and element hashing are pure overhead that
+      // forces GPU re-compositing and adds a visible frame of latency.
       if (isStylusDownRef.current || appState?.newElement != null) {
         return;
+      }
+
+      if (appState?.zoom) {
+        updateSheetTransform(appState.scrollX, appState.scrollY, appState.zoom.value);
       }
 
       // Compute fast 32-bit djb2 hash over active elements

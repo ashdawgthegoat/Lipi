@@ -12,7 +12,7 @@ import '../infrastructure/documents/atomic_document_writer.dart';
 import '../infrastructure/documents/document_repository.dart';
 import '../infrastructure/documents/document_write_coordinator.dart';
 import '../infrastructure/documents/vault_document_repository.dart';
-import '../infrastructure/ink/editor_runtime_server.dart';
+import '../infrastructure/ink/native_ink_engine.dart';
 import '../infrastructure/security/secure_key_store.dart';
 import '../infrastructure/security/vault_authentication.dart';
 import '../infrastructure/security/vault_crypto.dart';
@@ -41,7 +41,7 @@ class LipiDependencies {
   final DocumentRepository documentRepository;
   final AtomicDocumentWriter atomicWriter;
   final DocumentWriteCoordinator writeCoordinator;
-  final EditorRuntimeServer editorServer;
+  final NativeInkEngine inkEngine;
   final VaultBackupService vaultBackupService;
   final ThemeService themeService;
 
@@ -73,7 +73,7 @@ class LipiDependencies {
     required this.documentRepository,
     required this.atomicWriter,
     required this.writeCoordinator,
-    required this.editorServer,
+    required this.inkEngine,
     required this.vaultBackupService,
     required this.themeService,
     required this.initWorkflow,
@@ -151,7 +151,7 @@ class LipiDependencies {
       consultationRepository: consultationRepo,
     );
 
-    final editorServer = EditorRuntimeServer.instance;
+    final inkEngine = NativeInkEngine();
 
     final vaultBackupService = VaultBackupService(
       vault: vault,
@@ -234,7 +234,7 @@ class LipiDependencies {
       documentRepository: docRepo,
       atomicWriter: atomicWriter,
       writeCoordinator: writeCoordinator,
-      editorServer: editorServer,
+      inkEngine: inkEngine,
       vaultBackupService: vaultBackupService,
       themeService: themeService,
       initWorkflow: initWorkflow,
@@ -254,7 +254,7 @@ class LipiDependencies {
   }
 
   Future<void> dispose() async {
-    await editorServer.stop();
+    await inkEngine.dispose();
     await database.close();
     vault.close();
   }

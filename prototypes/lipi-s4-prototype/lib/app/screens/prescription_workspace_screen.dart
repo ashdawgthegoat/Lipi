@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:printing/printing.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:webview_flutter_android/webview_flutter_android.dart';
 import '../../domains/doctor/doctor_service.dart';
 import '../../domains/doctor/models/doctor_profile.dart';
 import '../../domains/patient/models/patient_record.dart';
@@ -618,7 +619,15 @@ class _PrescriptionWorkspaceScreenState extends State<PrescriptionWorkspaceScree
         ),
         body: Platform.isAndroid
             ? (_webController != null
-                ? WebViewWidget(controller: _webController!)
+                // Use Hybrid Composition to eliminate the SurfaceTexture
+                // frame-copy latency (~11ms at 90Hz) that causes visible
+                // pen-render lag with TLHC (the default rendering mode).
+                ? WebViewWidget.fromPlatformCreationParams(
+                    params: AndroidWebViewWidgetCreationParams(
+                      controller: _webController!.platform,
+                      displayWithHybridComposition: true,
+                    ),
+                  )
                 : const Center(child: CircularProgressIndicator()))
             : _buildDesktopFallbackView(
                 patientName: patientName,
